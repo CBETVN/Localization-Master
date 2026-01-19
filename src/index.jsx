@@ -7,7 +7,7 @@ import { App } from "./main";
 
 console.clear(); // Clear logs on each reload
 
-ReactDOM.createRoot(document.getElementById("app") as HTMLElement).render(
+ReactDOM.createRoot(document.getElementById("app")).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,

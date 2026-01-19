@@ -1,6 +1,6 @@
 import { uxp } from "../globals";
 
-export const openUXPPanel = async (id: string) => {
+export const openUXPPanel = async (id) => {
   const plugins = Array.from(uxp.pluginManager.plugins);
 
   const plugin = plugins.find(
@@ -13,15 +13,15 @@ export const openUXPPanel = async (id: string) => {
 
 export const getUXPInfo = async () => {
   const info = {
-    version: uxp.versions.uxp as string,
-    hostName: uxp.host.name.toLowerCase() as string,
-    hostVersion: uxp.host.version as string,
-    pluginId: uxp.entrypoints._pluginInfo.id as string,
-    pluginVersion: uxp.entrypoints._pluginInfo.version as string,
+    version: uxp.versions.uxp,
+    hostName: uxp.host.name.toLowerCase(),
+    hostVersion: uxp.host.version,
+    pluginId: uxp.entrypoints._pluginInfo.id,
+    pluginVersion: uxp.entrypoints._pluginInfo.version,
   };
   return info;
 };
-export const openURL = async (url: string) => {
+export const openURL = async (url) => {
   uxp.shell.openExternal(url, "");
 };
 
@@ -77,12 +77,7 @@ const colorTable = {
 };
 
 export const getColorScheme = async () => {
-  //@ts-ignore
-  const theme = document.theme.getCurrent() as
-    | "light"
-    | "dark"
-    | "lightest"
-    | "darkest";
+  const theme = document.theme.getCurrent();
   const colors = colorTable[theme];
   return { theme, colors };
 };

@@ -1,6 +1,6 @@
 import { photoshop } from "../globals";
 
-export const notify = async (message: string) => {
+export const notify = async (message) => {
   await photoshop.app.showAlert(message);
 };
 
