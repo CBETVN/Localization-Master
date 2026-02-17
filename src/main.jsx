@@ -6,7 +6,7 @@ import tsLogo from "./assets/typescript.png";
 import sassLogo from "./assets/sass.png";
 import reactLogo from "./assets/react.png";
 
-import { uxp, indesign, photoshop, premierepro, illustrator } from "./globals";
+import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
 
 export const App = () => {
