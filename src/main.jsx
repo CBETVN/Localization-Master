@@ -15,7 +15,7 @@ export const App = () => {
   const webviewUI = import.meta.env.VITE_BOLT_WEBVIEW_UI === "true";
   
   const [count, setCount] = useState(0);
-  const increment = () => setCount((count) => count + 1);
+  const increment = () => setCount((currentValue) => currentValue + 1);
 
   const [selectedId, setSelectedId] = useState(null);
   const [suggestions, setSuggestions] = useState([
@@ -36,9 +36,9 @@ export const App = () => {
   const hostName = (uxp.host.name).toLowerCase();
 
   //* Call Functions Conditionally by App
-  if (hostName === "photoshop") {
-    console.log("Hello from Photoshop", photoshop);
-  }
+  // if (hostName === "photoshop") {
+  //   console.log("Hello from Photoshop", photoshop);
+  // }
       
   //* Or call the unified API object directly and the correct app function will be used
   const simpleAlert = () => {
@@ -90,6 +90,13 @@ export const App = () => {
             <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
               Update First Suggestion
             </button>
+            <button onClick={async () => {
+            const activeLayer = app.activeDocument.activeLayers[0];
+            const info = await api.doesSelectedSOhaveInstances(activeLayer);
+            // console.log("Layer info:", info);
+          }}>
+            Check Layer Info
+          </button>
           </div>
         </main>
       ) : (
