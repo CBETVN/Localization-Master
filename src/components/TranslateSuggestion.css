@@ -1,0 +1,14 @@
+/* Custom styles for TranslateSuggestion component */
+.translate-suggestion {
+  cursor: pointer;
+}
+
+.translate-suggestion:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Selected state - make it stand out */
+.translate-suggestion[selected] {
+  background-color: rgba(38, 128, 235, 0.3) !important;
+  border-left: 3px solid #2680EB;
+}

@@ -1,4 +1,9 @@
 import { uxp } from "../globals";
+const fs = uxp.storage.localFileSystem;
+const { formats } = uxp.storage;
+
+// Export fs and formats directly so you can use api.fs.getFolder(), api.formats.binary, etc.
+export { fs, formats };
 
 export const openUXPPanel = async (id) => {
   const plugins = Array.from(uxp.pluginManager.plugins);

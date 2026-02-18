@@ -1,19 +1,37 @@
 import React, { useEffect, useState } from "react";
 
-import boltUxpLogo from "./assets/bolt-uxp.png";
-import viteLogo from "./assets/vite.png";
-import tsLogo from "./assets/typescript.png";
-import sassLogo from "./assets/sass.png";
-import reactLogo from "./assets/react.png";
+// import boltUxpLogo from "./assets/bolt-uxp.png";
+// import viteLogo from "./assets/vite.png";
+// import tsLogo from "./assets/typescript.png";
+// import sassLogo from "./assets/sass.png";
+// import reactLogo from "./assets/react.png";
 
 import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
+import { TranslateSuggestion } from "./components/TranslateSuggestion";
+const { app, core, action } = photoshop;
 
 export const App = () => {
   const webviewUI = import.meta.env.VITE_BOLT_WEBVIEW_UI === "true";
   
   const [count, setCount] = useState(0);
-  const increment = () => setCount((prev) => prev + 1);
+  const increment = () => setCount((count) => count + 1);
+
+  const [selectedId, setSelectedId] = useState(null);
+  const [suggestions, setSuggestions] = useState([
+    { id: 1, text: "", placeholder: "Suggestion..." },
+    { id: 2, text: "", placeholder: "Suggestion..." },
+    { id: 3, text: "", placeholder: "Suggestion..." },
+    { id: 4, text: "", placeholder: "Suggestion..." },
+    { id: 5, text: "", placeholder: "Suggestion..." },
+  ]);
+
+  // Example: Dynamically update suggestion text
+  const updateSuggestion = (id, newText) => {
+    setSuggestions(prev =>
+      prev.map(s => s.id === id ? { ...s, text: newText } : s)
+    );
+  };
 
   const hostName = (uxp.host.name).toLowerCase();
 
@@ -26,11 +44,29 @@ export const App = () => {
   const simpleAlert = () => {
     api.notify("Hello World");
   };
+
+  function test() {
+    app.showAlert("Hello from the API!");
+  }
+
+
+
   return (
     <>
       {!webviewUI ? (
         <main>
-          <div>
+        <sp-menu>
+          {suggestions.map(suggestion => (
+            <TranslateSuggestion
+              key={suggestion.id}
+              text={suggestion.text}
+              placeholder={suggestion.placeholder}
+              isSelected={selectedId === suggestion.id}
+              onClick={() => setSelectedId(suggestion.id)}
+            />
+          ))}
+        </sp-menu>
+          {/* <div>
             <img className="logo-lg" src={boltUxpLogo} alt="" />
           </div>
           <div className="stack-icons">
@@ -42,15 +78,18 @@ export const App = () => {
             <span> + </span>
             <img src={reactLogo} className="logo" alt="" />
           </div>
-          <h1>Built with Bolt UXP</h1>
+          <h1>Built with Bolt UXP</h1> */}
           <div className="card">
-            <button onClick={increment}>count is {count}</button>
+            <button onClick={increment}>Count is {count}</button>
           </div>
           <p>
-            Edit <code>src/main.jsx</code> and save to test HMR
+            Some text
           </p>
           <div className="card">
-            <button onClick={simpleAlert}>Complex Alert</button>
+            <button onClick={test}>Complex Alert</button>
+            <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
+              Update First Suggestion
+            </button>
           </div>
         </main>
       ) : (
