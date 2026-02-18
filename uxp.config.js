@@ -1,16 +1,15 @@
-import { UXP_Manifest, UXP_Config } from "vite-uxp-plugin";
 import { version } from "./package.json";
 
 const extraPrefs = {
   hotReloadPort: 8080,
-    copyZipAssets: ["public-zip/*"],
+  copyZipAssets: ["public-zip/*"],
   uniqueIds: true,
 };
 
 export const id = "LocalizationMaster"; 
 const name = "LocalizationMaster"; 
 
-const manifest: UXP_Manifest = {
+const manifest = {
   id,
   name,
   version,
@@ -21,7 +20,7 @@ const manifest: UXP_Manifest = {
       app: "PS",
       minVersion: "24.2.0",
     },
-              ],
+  ],
   entrypoints: [
     {
       type: "panel",
@@ -128,7 +127,7 @@ const manifest: UXP_Manifest = {
     allowCodeGenerationFromStrings: true,
 
   },
-    icons: [
+  icons: [
     {
       width: 48,
       height: 48,
@@ -140,7 +139,7 @@ const manifest: UXP_Manifest = {
   ],
 };
 
-export const config: UXP_Config = {
+export const config = {
   manifest,
   ...extraPrefs,
 };

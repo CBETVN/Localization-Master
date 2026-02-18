@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import { runAction, uxp, uxpSetup } from "vite-uxp-plugin";
 import react from "@vitejs/plugin-react"; 
 
-import { config } from "./uxp.config.ts";
+import { config } from "./uxp.config.js";
 
 const action = process.env.BOLT_ACTION;
 const mode = process.env.MODE;

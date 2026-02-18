@@ -1,10 +1,9 @@
 import { premierepro } from "../../globals";
-import { Action, Project } from "../../types/ppro";
 
 export const asTransaction = async (
-  proj: Project,
-  actions: Action[],
-  description: string,
+  proj,
+  actions,
+  description,
 ) => {
   proj.executeTransaction(async (compAction) => {
     for (const action of actions) {
@@ -14,9 +13,9 @@ export const asTransaction = async (
 };
 
 export const lockedTransaction = async (
-  proj: Project,
-  actions: Action[],
-  description: string,
+  proj,
+  actions,
+  description,
 ) => {
   proj.lockedAccess(() =>
     proj.executeTransaction(async (compAction) => {
