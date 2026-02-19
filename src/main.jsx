@@ -10,15 +10,21 @@ import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
 import { TranslateSuggestion } from "./components/TranslateSuggestion";
 import { SuggestionsContainer } from "./components/SuggestionsContainer";
+import { LoadFDiskButton } from "./components/LoadFDiskButton";
+// import * as XLSX from "./lib/xlsx.full.min.js";
 
-import * as XLSX from "./lib/xlsx.full.min.js";
 const { app, core, action } = photoshop;
 
 export const App = () => {
   const webviewUI = import.meta.env.VITE_BOLT_WEBVIEW_UI === "true";
   
-  const [count, setCount] = useState(0);
-  const increment = () => setCount((currentValue) => currentValue + 1);
+  // const [count, setCount] = useState(0);
+  // const increment = () => setCount((currentValue) => currentValue + 1);
+  const [languageData, setLanguageData] = useState({});
+  const [availableLanguages, setAvailableLanguages] = useState([]);
+  const [selectedLanguage, setSelectedLanguage] = useState("");
+
+
 
   const [selectedId, setSelectedId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
@@ -78,14 +84,17 @@ export const App = () => {
       {!webviewUI ? (
         <main>
           <div className="card">
-
+          {/* <sp-menu>
+            <sp-menu-item>Menu Item 1</sp-menu-item>
+            <sp-menu-item>Menu Item 2</sp-menu-item>
+            <sp-menu-item>Menu Item 3</sp-menu-item>
+          </sp-menu> */}
           </div>
+          <LoadFDiskButton />
           <p>
             Some text
           </p>
           <div className="card">
-
-
             <button onClick={async () => {
             const activeLayer = app.activeDocument.activeLayers[0];
             const info = await api.doesSelectedSOhaveInstances(activeLayer);
@@ -106,6 +115,7 @@ export const App = () => {
             isProcessing={isProcessing}
           />
           <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
+
           </div>
         </main>
       ) : (
