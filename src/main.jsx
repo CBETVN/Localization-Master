@@ -21,13 +21,32 @@ export const App = () => {
   const increment = () => setCount((currentValue) => currentValue + 1);
 
   const [selectedId, setSelectedId] = useState(null);
-  const [suggestions, setSuggestions] = useState([
-    { id: 1, text: "", placeholder: "Suggestion..." },
-    { id: 2, text: "", placeholder: "Suggestion..." },
-    { id: 3, text: "", placeholder: "Suggestion..." },
-    { id: 4, text: "", placeholder: "Suggestion..." },
-    { id: 5, text: "", placeholder: "Suggestion..." },
-  ]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Generate suggestions from your logic
+  const handleGenerate = async () => {
+    try {
+      setIsProcessing(true);
+      
+      // TODO: Replace this with your actual function that returns an array
+      // Example: const phrases = await yourFunctionThatReturnsArray();
+      const phrases = ["Example phrase 1", "Example phrase 2", "Example phrase 3"];
+      
+      // Convert array to suggestion objects
+      const newSuggestions = phrases.map((text, index) => ({
+        id: index + 1,
+        text,
+        placeholder: ""
+      }));
+      
+      setSuggestions(newSuggestions);
+    } catch (error) {
+      console.error("Error generating suggestions:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Example: Dynamically update suggestion text
   const updateSuggestion = (id, newText) => {
@@ -58,17 +77,6 @@ export const App = () => {
     <>
       {!webviewUI ? (
         <main>
-        <sp-menu>
-          {suggestions.map(suggestion => (
-            <TranslateSuggestion
-              key={suggestion.id}
-              text={suggestion.text}
-              placeholder={suggestion.placeholder}
-              isSelected={selectedId === suggestion.id}
-              onClick={() => setSelectedId(suggestion.id)}
-            />
-          ))}
-        </sp-menu>
           <div className="card">
 
           </div>
@@ -88,7 +96,16 @@ export const App = () => {
           <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
               Update First Suggestion
           </button>
-          <SuggestionsContainer maxHeight="200px" />
+          
+          <SuggestionsContainer 
+            maxHeight="400px"
+            suggestions={suggestions}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onGenerate={handleGenerate}
+            isProcessing={isProcessing}
+          />
+          <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
           </div>
         </main>
       ) : (

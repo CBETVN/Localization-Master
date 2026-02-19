@@ -1,29 +1,19 @@
 import React, { useState, useRef } from "react";
+import { TranslateSuggestion } from "./TranslateSuggestion";
 import "./SuggestionsContainer.css";
 
-export const SuggestionsContainer = ({ maxHeight = "300px" }) => {
-  const [suggestions, setSuggestions] = useState([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-//   const handleCheckUncheck = (action) => {
-//     if (action === 'check') {
-//       setSuggestions(prev => prev.map(s => ({ ...s, checked: true })));
-//     } else if (action === 'uncheck') {
-//       setSuggestions(prev => prev.map(s => ({ ...s, checked: false })));
-//     }
-//   };
+export const SuggestionsContainer = ({ 
+  maxHeight = "300px",
+  suggestions = [],
+  selectedId = null,
+  onSelect = () => {},
+  onGenerate = () => {},
+  isProcessing = false
+}) => {
 
   return (
     <>
       <div className="suggestions-container">
-        {/* <div className="suggestions-container-header">
-          <div className="counters">
-            <span className="suggestion-counter">All suggestions ({suggestions.length})</span>
-            <span className="checked-counter">Checked ({suggestions.filter(s => s.checked).length})</span>
-          </div>
-        </div> */}
-
-        {/* Scrollable container */}
         <div 
           className="suggestions-container-scrollable"
           style={{ height: maxHeight }}
@@ -33,14 +23,17 @@ export const SuggestionsContainer = ({ maxHeight = "300px" }) => {
               No suggestions yet.
             </div>
           ) : (
-            suggestions.map((suggestion) => (
-              <div key={suggestion.id} className="suggestion-item">
-                <div className="suggestion-item-content">
-                  {/* Suggestion content goes here */}
-                  {suggestion.text}
-                </div>
-              </div>
-            ))
+            <sp-menu>
+              {suggestions.map((suggestion) => (
+                <TranslateSuggestion
+                  key={suggestion.id}
+                  text={suggestion.text}
+                  placeholder={suggestion.placeholder}
+                  isSelected={selectedId === suggestion.id}
+                  onClick={() => onSelect(suggestion.id)}
+                />
+              ))}
+            </sp-menu>
           )}
         </div>
 

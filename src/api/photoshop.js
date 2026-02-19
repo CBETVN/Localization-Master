@@ -122,3 +122,21 @@ export async function doesSelectedSOhaveInstances(layer) {
 //   // Then iterate through layers and compare smartObject.documentID or smartObjectMore.placed
 //   // Count how many have the same ID
 // }
+
+
+export async function getParentFolder(layer) {
+  console.log("Checking:", layer.name);
+  console.log("Layer is part of the group:", layer.parent.name);
+  try {
+    if (!layer.parent) {
+      console.log("Layer has no parent.");
+      return null;
+    } else {
+      console.log("Parent folder is:", layer.parent.name);
+      return layer.parent.name;
+    }
+  } catch (error) {
+    console.error("Error accessing parent folder:", error);
+  }
+
+}
