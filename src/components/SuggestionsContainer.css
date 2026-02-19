@@ -1,0 +1,76 @@
+/* Suggestions Container Styles */
+.suggestions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--background-color, #2d2d2d);
+  border-radius: 4px;
+}
+
+.suggestions-container-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.check-uncheck-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.counters {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9em;
+  color: var(--text-color, #e1e1e1);
+}
+
+.suggestion-counter,
+.checked-counter {
+  padding: 4px 8px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.suggestions-container-scrollable {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.suggestions-container-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-color-secondary, #999);
+  font-style: italic;
+}
+
+.suggestion-item {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 12px;
+  transition: background-color 0.2s;
+}
+
+.suggestion-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.suggestion-item-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.suggestions-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

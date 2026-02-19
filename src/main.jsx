@@ -9,6 +9,9 @@ import React, { useEffect, useState } from "react";
 import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
 import { TranslateSuggestion } from "./components/TranslateSuggestion";
+import { SuggestionsContainer } from "./components/SuggestionsContainer";
+
+import * as XLSX from "./lib/xlsx.full.min.js";
 const { app, core, action } = photoshop;
 
 export const App = () => {
@@ -66,37 +69,26 @@ export const App = () => {
             />
           ))}
         </sp-menu>
-          {/* <div>
-            <img className="logo-lg" src={boltUxpLogo} alt="" />
-          </div>
-          <div className="stack-icons">
-            <img src={viteLogo} className="logo" alt="" />
-            <span> + </span>
-            <img src={tsLogo} className="logo" alt="" />
-            <span> + </span>
-            <img src={sassLogo} className="logo" alt="" />
-            <span> + </span>
-            <img src={reactLogo} className="logo" alt="" />
-          </div>
-          <h1>Built with Bolt UXP</h1> */}
           <div className="card">
-            <button onClick={increment}>Count is {count}</button>
+
           </div>
           <p>
             Some text
           </p>
           <div className="card">
-            <button onClick={test}>Complex Alert</button>
-            <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
-              Update First Suggestion
-            </button>
+
+
             <button onClick={async () => {
             const activeLayer = app.activeDocument.activeLayers[0];
             const info = await api.doesSelectedSOhaveInstances(activeLayer);
-            // console.log("Layer info:", info);
-          }}>
-            Check Layer Info
+            }}>Check Layer Info
           </button>
+          {/* <button onClick={increment}>Count is {count}</button> */}
+          <button onClick={test}>Complex Alert</button>
+          <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
+              Update First Suggestion
+          </button>
+          <SuggestionsContainer maxHeight="200px" />
           </div>
         </main>
       ) : (

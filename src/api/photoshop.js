@@ -78,9 +78,9 @@ export async function doesSelectedSOhaveInstances(layer) {
     return { isSmartObject: false, instances: [] };
   }
   
-  const targetSOID = layerInfo.smartObjectMore.ID;
+  const targetSOid = layerInfo.smartObjectMore.ID;
   
-  console.log("Looking for instances of:", layer.name, "and SmartObject ID:", targetSOID);
+  console.log("Looking for instances of:", layer.name, "and SmartObject ID:", targetSOid);
   
   // Get all layers in the document (including nested)
   const doc = photoshop.app.activeDocument;
@@ -92,7 +92,7 @@ export async function doesSelectedSOhaveInstances(layer) {
   for (const l of allLayers) {
     const info = await getLayerInfo(l);
     
-    if (info && info.smartObjectMore?.ID === targetSOID) {
+    if (info && info.smartObjectMore?.ID === targetSOid) {
       instances.push({
         id: l.id,
         name: l.name
@@ -104,7 +104,7 @@ export async function doesSelectedSOhaveInstances(layer) {
   
   return {
     isSmartObject: true,
-    smartObjectID: targetSOID,
+    smartObjectID: targetSOid,
     instanceCount: instances.length,
     instances: instances
   };
