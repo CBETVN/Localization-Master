@@ -142,6 +142,7 @@ export const App = () => {
             onLanguageChange={setSelectedLanguage}
           />
           </div>
+          <TranslateAllButton onClick={(result) => console.log(result)} />
           <div className="card">
             <button onClick={async () => {
             const activeLayer = app.activeDocument.activeLayers[0];

@@ -52,7 +52,7 @@ export async function getLayerInfo(layer) {
 }
 
 // Helper function to recursively get all layers including nested ones
-function getAllLayers(layers) {
+export function getAllLayers(layers) {
   let allLayers = [];
   for (const layer of layers) {
     allLayers.push(layer);
@@ -139,4 +139,13 @@ export async function getParentFolder(layer) {
     console.error("Error accessing parent folder:", error);
   }
 
+}
+
+
+
+export async function isLayerAGroup(layer) {
+  if (layer.layers && layer.layers.length > 0 || Array.isArray(layer.layers)) {
+    return true;
+  }
+  return false;
 }

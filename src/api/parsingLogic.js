@@ -1,6 +1,8 @@
 // Import XLSX - it's a UMD library that may attach to global scope
 import "../lib/xlsx.full.min.js";
 import { uxp } from "../globals";
+import { photoshop } from "../globals";
+import * as ps from "./photoshop"; // Import all Photoshop API functions as ps
 
 // Access XLSX from global scope
 const XLSX = window.XLSX;
@@ -73,4 +75,18 @@ function extractLanguageData(workbook) {
   }
   
   return { languageData, availableLanguages };
+}
+
+export function translateAll() {
+  // TODO: implement translation logic
+  const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
+  // for(const layer of allLayers) {
+  //   console.log(`Layer: ${layer.name}`);
+  // }
+  for(let i = 0; i < allLayers.length; i++) {
+    if(allLayers[i].kind === "group") {
+      console.log(`Layer: ${allLayers[i].name} is a group/folder`);
+    }
+  }
+  console.log("Translating all layers...");
 }
