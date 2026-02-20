@@ -124,7 +124,9 @@ export async function translateAll(appState) {
     return;
   }
 
-  await executeAsModal("Translate All Layers", async () => {
+  let instances = [];
+
+  
     const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
     for (const layer of allLayers) {
       // Only process visible group layers
@@ -132,9 +134,26 @@ export async function translateAll(appState) {
         if (isLayerNameInEN(layer.name, appState)) {
           console.log(`Layer: ${layer.name} is in EN list and will be translated`);
           // Example action: hide the layer (replace with translation logic)
-          layer.visible = false;
+          // layer.visible = false;
+          let childrenLayers = layer.layers;
+          for (const child of childrenLayers) {
+            console.log(`Child layer: ${child.name} of parent ${layer.name}`);
+            if (child.kind === "textLayer" && child.visible === true) {
+              console.log(`--> Text layer found: ${child.name}`);
+            } else if (child.kind === "smartObject" && child.visible === true) {
+              console.log(`--> SmartObject layer found: ${child.name}`);
+            }
+          }
         }
       }
     }
-  });
+
+}
+
+
+export function getChildrenLayers(layer) {
+    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
+        return layer.layers;
+    }
+    return [];
 }
