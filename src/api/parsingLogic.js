@@ -1,3 +1,4 @@
+
 import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
 
 // Import XLSX - it's a UMD library that may attach to global scope
@@ -89,7 +90,7 @@ export function parseForTranslation(text) {
 
 
 // Checks if a layer name matches any line in the EN phrases array from appState.languageData
-export function isLayerNameInEN(layerName, appState) {
+export function isNameInEN(layerName, appState) {
   const engKey = appState.languageData && appState.languageData["EN"];
   if (!engKey || !Array.isArray(engKey)) return false;
   for (const entry of engKey) {
@@ -125,13 +126,42 @@ export async function translateAll(appState) {
   }
 
   let instances = [];
+  const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
 
+  for (const layer of allLayers) {
+    let parentFolder = ps.getParentFolder(layer);
+    if (parentFolder !== null && layer.visible === true && isNameInEN(parentFolder, appState)) {
+      // console.log(`Layer: ${layer.name} is in matching parent folder: ${parentFolder} and will be translated by using "translateByFolder" function`);
+      console.log("+1");
+    } else if (layer.visible === true ) {
+      // console.log(`Layer name: ${layer.name}`);
+      // console.log(`Layer: ${layer.name} has no parent folder but is visible, checking if it matches EN list and will be translated by using "compareLayerTextToEN" function`);
+      compareLayerTextToEN(layer, appState);
+    }
   
-    const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
+  }
+}
+
+
+
+
+
+export function getChildrenLayers(layer) {
+    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
+        return layer.layers;
+    }
+    return [];
+}
+
+
+
+// Serch for parent folder and translate
+export function translateByFolder(appState, allLayers) {
+  
     for (const layer of allLayers) {
       // Only process visible group layers
       if (ps.isLayerAGroup(layer) && layer.visible === true) {
-        if (isLayerNameInEN(layer.name, appState)) {
+        if (isNameInEN(layer.name, appState)) {
           console.log(`Layer: ${layer.name} is in EN list and will be translated`);
           // Example action: hide the layer (replace with translation logic)
           // layer.visible = false;
@@ -148,12 +178,25 @@ export async function translateAll(appState) {
       }
     }
 
+
 }
 
 
-export function getChildrenLayers(layer) {
-    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
-        return layer.layers;
-    }
-    return [];
+// Compare layer.text to parsed EN lines, log and break on first match
+export function compareLayerTextToEN(layer, appState) {
+  const enEntries = appState.languageData && appState.languageData["EN"];
+  if (!enEntries || !Array.isArray(enEntries)) return false;
+  // Preprocess all EN lines to uppercase for case-insensitive comparison
+  const enLines = [];
+  for (const entry of enEntries) {
+    enLines.push(...parseForTranslation(entry).map(line => line.toUpperCase()));
+  }
+  const enLineSet = new Set(enLines);
+  // Compare layer.name uppercased
+  const layerNameUpper = layer.name.toUpperCase();
+  if (enLineSet.has(layerNameUpper)) {
+    console.log(`Layer name "${layer.name}" matches EN line.`);
+    return true;
+  }
+  return false;
 }
