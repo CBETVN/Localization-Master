@@ -58,7 +58,7 @@ export const LoadFURLButton = ({ onFileLoaded }) => {
   };
 
   return (
-    <sp-action-button onClick={handleLoadFromURL}>
+    <sp-action-button disabled onClick={handleLoadFromURL}>
       Load From URL
     </sp-action-button>
   );

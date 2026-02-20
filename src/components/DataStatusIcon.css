@@ -1,0 +1,16 @@
+.data-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--font);
+}
+
+.data-status-indicator {
+  width: 150px;
+  height: 150px;
+  display: block;
+}
+
+.data-status-text {
+  font-size: 0.9rem;
+}

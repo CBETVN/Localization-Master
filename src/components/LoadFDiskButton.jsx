@@ -13,7 +13,6 @@ export const LoadFDiskButton = ({ onFileLoaded }) => {
         console.log("No file selected");
         return;
       }
-
       console.log("File selected:", file.name);
 
       const parsedData = await api.parseExcelFile(file);
