@@ -6,7 +6,9 @@ import { TranslateSuggestion } from "./components/TranslateSuggestion";
 import { SuggestionsContainer } from "./components/SuggestionsContainer";
 import { LoadFDiskButton } from "./components/LoadFDiskButton";
 import { LoadFURLButton } from "./components/LoadFURLButton";
+import { TranslateAllButton } from "./components/TranslateAllButton";
 import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown";
+import { DataStatusIcon } from "./components/DataStatusIcon";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
 const { app, core, action } = photoshop;
@@ -19,6 +21,7 @@ export const App = () => {
   const [languageData, setLanguageData] = useState({});
   const [availableLanguages, setAvailableLanguages] = useState([]);
   const [selectedLanguage, setSelectedLanguage] = useState("");
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
 
 
@@ -28,8 +31,23 @@ export const App = () => {
 
 
   const handleFileLoaded = (parsedData) => {
+    const hasLanguageData =
+      parsedData &&
+      parsedData.languageData &&
+      Object.keys(parsedData.languageData).length > 0;
+    const hasAvailableLanguages =
+      parsedData &&
+      Array.isArray(parsedData.availableLanguages) &&
+      parsedData.availableLanguages.length > 0;
+
+    if (!hasLanguageData || !hasAvailableLanguages) {
+      setIsDataLoaded(false);
+      return;
+    }
+
     setLanguageData(parsedData.languageData);
     setAvailableLanguages(parsedData.availableLanguages);
+    setIsDataLoaded(true);
     // Don't auto-select - let user choose
   };
 
@@ -90,8 +108,19 @@ export const App = () => {
     api.notify("Hello World");
   };
 
-  function test() {
-    app.showAlert("Hello from the API!");
+  function findLayersPosition() {
+  const selectedLayer = app.activeDocument.activeLayers[0];
+
+  if (selectedLayer.kind === "group") {
+      const groupLayers = selectedLayer.layers;
+
+      console.log(`Layers in group "${selectedLayer.name}":`);
+      groupLayers.forEach((layer, index) => {
+          console.log(`Position ${index} (0 = top): ${layer.name}`);
+      });
+  } else {
+      console.log("Selected layer is not a group.");
+  }
   }
 
 
@@ -100,6 +129,11 @@ export const App = () => {
     <>
       {!webviewUI ? (
         <main>
+
+          <DataStatusIcon isActive={isDataLoaded} />
+
+          <LoadFDiskButton onFileLoaded={handleFileLoaded} />
+          <LoadFURLButton onFileLoaded={handleFileLoaded} />
           <div className="card">
 
             <LanguageSelectorDropdown
@@ -108,12 +142,6 @@ export const App = () => {
             onLanguageChange={setSelectedLanguage}
           />
           </div>
-
-          <LoadFURLButton onFileLoaded={handleFileLoaded} />
-          <LoadFDiskButton onFileLoaded={handleFileLoaded} />
-          <p>
-            Some text
-          </p>
           <div className="card">
             <button onClick={async () => {
             const activeLayer = app.activeDocument.activeLayers[0];
@@ -121,7 +149,7 @@ export const App = () => {
             }}>Check Layer Info
           </button>
           {/* <button onClick={increment}>Count is {count}</button> */}
-          <button onClick={test}>Complex Alert</button>
+          <button onClick={findLayersPosition}>Complex Alert</button>
           <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
               Update First Suggestion
           </button>
