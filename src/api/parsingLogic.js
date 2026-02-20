@@ -1,9 +1,11 @@
+import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
+
 // Import XLSX - it's a UMD library that may attach to global scope
 import "../lib/xlsx.full.min.js";
 import { uxp } from "../globals";
 import { photoshop } from "../globals";
-import * as ps from "./photoshop"; // Import all Photoshop API functions as ps
-
+import * as ps from "./photoshop.js"; // Import all Photoshop API functions as ps
+// import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
 
@@ -77,16 +79,62 @@ function extractLanguageData(workbook) {
   return { languageData, availableLanguages };
 }
 
-export function translateAll() {
-  // TODO: implement translation logic
-  const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
-  // for(const layer of allLayers) {
-  //   console.log(`Layer: ${layer.name}`);
-  // }
-  for(let i = 0; i < allLayers.length; i++) {
-    if(allLayers[i].kind === "group") {
-      console.log(`Layer: ${allLayers[i].name} is a group/folder`);
+//parse a phrase into lines and ignore lines with () or [] (like [NUMBER])
+export function parseForTranslation(text) {
+  return text
+    .split('\n') // Split into lines
+    .map(line => line.trim()) // Remove extra spaces
+    .filter(line => line && !line.includes('(') && !line.includes('[')); // Ignore lines with () or []
+}
+
+
+// Checks if a layer name matches any line in the EN phrases array from appState.languageData
+export function isLayerNameInEN(layerName, appState) {
+  const engKey = appState.languageData && appState.languageData["EN"];
+  if (!engKey || !Array.isArray(engKey)) return false;
+  for (const entry of engKey) {
+    const lines = entry.split('\n').map(line => line.trim());
+      // Split, trim, and filter out lines with (), [], or {}
+      const validLines = entry
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !/[\[\](){}]/.test(line));
+      const joined = validLines.join(' ');
+      if (joined === layerName) {
+      return true;
     }
   }
-  console.log("Translating all layers...");
+  return false;
+}
+
+
+
+
+
+
+// Translates all visible group layers whose names match EN entries, in a modal scope
+export async function translateAll(appState) {
+  // Validate required state
+  if (!appState.selectedLanguage) {
+    photoshop.app.showAlert("Please select a language first");
+    return;
+  }
+  if (!appState.languageData || !appState.languageData["EN"]) {
+    photoshop.app.showAlert("No English language data loaded.");
+    return;
+  }
+
+  await executeAsModal("Translate All Layers", async () => {
+    const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
+    for (const layer of allLayers) {
+      // Only process visible group layers
+      if (ps.isLayerAGroup(layer) && layer.visible === true) {
+        if (isLayerNameInEN(layer.name, appState)) {
+          console.log(`Layer: ${layer.name} is in EN list and will be translated`);
+          // Example action: hide the layer (replace with translation logic)
+          layer.visible = false;
+        }
+      }
+    }
+  });
 }

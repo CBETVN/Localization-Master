@@ -3,6 +3,7 @@ import React from "react";
 import { translateAll } from "../api/parsingLogic";
 
 export const TranslateAllButton = ({
+  appState,
   onClick,
   label = "Translate All",
 }) => {
@@ -10,7 +11,7 @@ export const TranslateAllButton = ({
     if (onClick) {
       onClick();
     }
-    translateAll();
+    translateAll(appState);
   };
   return (
     <sp-action-button onClick={handleClick}>

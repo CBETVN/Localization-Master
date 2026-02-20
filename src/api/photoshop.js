@@ -141,11 +141,14 @@ export async function getParentFolder(layer) {
 
 }
 
-
-
-export async function isLayerAGroup(layer) {
-  if (layer.layers && layer.layers.length > 0 || Array.isArray(layer.layers)) {
-    return true;
-  }
+// Check if layer is a group and has layers in it
+export function isLayerAGroup(layer) {
+    if(layer.kind === "group" && layer.layers.length > 0) {
+      // console.log(`Layer: ${layer.name} is a group/folder`);
+      return true;
+    }
+  // if(layer.kind === "group") {
+  //   return true;
+  // }
   return false;
 }

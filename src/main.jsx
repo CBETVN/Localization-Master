@@ -23,6 +23,14 @@ export const App = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("");
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+  // Bundle all relevant state into a single object to pass to logic/helpers or child components
+  const appState = {
+  languageData,
+  availableLanguages,
+  selectedLanguage,
+  isDataLoaded,
+  // ...add more as needed
+  };
 
 
   const [selectedId, setSelectedId] = useState(null);
@@ -142,7 +150,7 @@ export const App = () => {
             onLanguageChange={setSelectedLanguage}
           />
           </div>
-          <TranslateAllButton onClick={(result) => console.log(result)} />
+          <TranslateAllButton appState={appState} />
           <div className="card">
             <button onClick={async () => {
             const activeLayer = app.activeDocument.activeLayers[0];
