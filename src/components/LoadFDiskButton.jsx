@@ -4,13 +4,31 @@ import { api } from "../api/api";
 
 export const LoadFDiskButton = ({ onFileLoaded }) => {
   const handleLoadFile = async () => {
-    const file = await uxp.storage.localFileSystem.getFileForOpening({
-    types: ["xlsx", "xls"]
-    });
-    // TODO: Open file picker with uxp.storage.localFileSystem.getFileForOpening
-    // TODO: Get file object
-    // const parsedData = await api.parseExcelFile(file); // TODO: file not defined yet
-    // onFileLoaded(parsedData);
+    try {
+      const file = await uxp.storage.localFileSystem.getFileForOpening({
+        types: ["xlsx", "xls"],
+      });
+
+      if (!file) {
+        console.log("No file selected");
+        return;
+      }
+
+      console.log("File selected:", file.name);
+
+      const parsedData = await api.parseExcelFile(file);
+
+      console.log("Parsed data:", parsedData);
+      console.log("Available languages:", parsedData.availableLanguages);
+      console.log("Language data:", parsedData.languageData);
+
+      onFileLoaded(parsedData);
+
+      console.log("Data passed to parent successfully");
+
+    } catch (error) {
+      console.error("Error loading file:", error);
+    }
   };
 
   return (

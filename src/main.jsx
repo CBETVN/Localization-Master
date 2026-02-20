@@ -1,16 +1,12 @@
 import React, { useEffect, useState } from "react";
 
-// import boltUxpLogo from "./assets/bolt-uxp.png";
-// import viteLogo from "./assets/vite.png";
-// import tsLogo from "./assets/typescript.png";
-// import sassLogo from "./assets/sass.png";
-// import reactLogo from "./assets/react.png";
-
 import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
 import { TranslateSuggestion } from "./components/TranslateSuggestion";
 import { SuggestionsContainer } from "./components/SuggestionsContainer";
 import { LoadFDiskButton } from "./components/LoadFDiskButton";
+import { LoadFURLButton } from "./components/LoadFURLButton";
+import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
 const { app, core, action } = photoshop;
@@ -30,13 +26,34 @@ export const App = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
+
+  const handleFileLoaded = (parsedData) => {
+    setLanguageData(parsedData.languageData);
+    setAvailableLanguages(parsedData.availableLanguages);
+    // Don't auto-select - let user choose
+  };
+
+
+
   // Generate suggestions from your logic
   const handleGenerate = async () => {
+    // Validate that a language is selected
+    if (!selectedLanguage) {
+      api.notify("Please select a language first");
+      return;
+    }
+    
+    // Validate that language data exists
+    if (!languageData[selectedLanguage]) {
+      api.notify("No translation data available for selected language");
+      return;
+    }
+    
     try {
       setIsProcessing(true);
       
       // TODO: Replace this with your actual function that returns an array
-      // Example: const phrases = await yourFunctionThatReturnsArray();
+      // Example: const phrases = languageData[selectedLanguage];
       const phrases = ["Example phrase 1", "Example phrase 2", "Example phrase 3"];
       
       // Convert array to suggestion objects
@@ -84,13 +101,16 @@ export const App = () => {
       {!webviewUI ? (
         <main>
           <div className="card">
-          {/* <sp-menu>
-            <sp-menu-item>Menu Item 1</sp-menu-item>
-            <sp-menu-item>Menu Item 2</sp-menu-item>
-            <sp-menu-item>Menu Item 3</sp-menu-item>
-          </sp-menu> */}
+
+            <LanguageSelectorDropdown
+            availableLanguages={availableLanguages}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={setSelectedLanguage}
+          />
           </div>
-          <LoadFDiskButton />
+
+          <LoadFURLButton onFileLoaded={handleFileLoaded} />
+          <LoadFDiskButton onFileLoaded={handleFileLoaded} />
           <p>
             Some text
           </p>
