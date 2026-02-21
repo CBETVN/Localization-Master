@@ -27,86 +27,7 @@ export const getProjectInfo = async () => {
 
 
 
-
-
-// export async function translateSmartObject(smartObject, translation) {
-
-//   await editSmartObject(smartObject);
-
-//     const allLayers = app.activeDocument.layers;
-      
-//     for (const layer of allLayers) {
-    
-//     if (layer.kind === "text") {
-//       const originalSize = await getFontSizeInPT(layer);
-//       console.log("Original font size in points:", originalSize);
-//       layer.textItem.contents = translation;
-//       app.activeDocument.activeLayers = [layer];
-//       await changeTextSize(originalSize);
-//       console.log(await getFontSizeInPT(layer));
-//     }
-//   }
-
-//   await app.activeDocument.save();
-//   app.activeDocument.closeWithoutSaving();
-//   // const selectedLayers = photoshop.app.activeDocument.activeLayers;
-// }
-
-
-
-
-// export async function translateSmartObject(smartObject, translation) {
-//   console.log("translateSmartObject called (active)", smartObject, translation);
-//     console.log("Before executeAsModal");
-//     try {
-//       await executeAsModal(async () => {
-//         console.log("Inside executeAsModal callback");
-//         console.log("Entering edit mode for Smart Object:", smartObject.name);
-//         await editSmartObject(smartObject);
-
-//         const allLayers = app.activeDocument.layers;
-
-//         for (const layer of allLayers) {
-//           if (layer.kind === "text") {
-//             // Get font size via batchPlay (no executeAsModal wrapper needed)
-//             const layerInfo = await batchPlay([{
-//               _obj: "get",
-//               _target: [{ _ref: "layer", _id: layer.id }]
-//             }], { synchronousExecution: true });
-
-//             const originalSize = layerInfo[0].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
-
-//             // Set new text
-//             layer.textItem.contents = translation;
-//             app.activeDocument.activeLayers = [layer];
-
-//             // Restore font size
-//             await batchPlay([{
-//               _obj: "set",
-//               _target: [
-//                 { _ref: "property", _property: "textStyle" },
-//                 { _ref: "textLayer", _enum: "ordinal", _value: "targetEnum" }
-//               ],
-//               to: {
-//                 _obj: "textStyle",
-//                 textOverrideFeatureName: 808465458,
-//                 typeStyleOperationType: 3,
-//                 size: { _unit: "pointsUnit", _value: originalSize }
-//               },
-//               _options: { dialogOptions: "dontDisplay" }
-//             }], { synchronousExecution: true });
-//           }
-//         }
-
-//         await app.activeDocument.save();
-//         app.activeDocument.closeWithoutSaving();
-//       }, { commandName: "Translate Smart Object" });
-//       console.log("executeAsModal completed");
-//     } catch (e) {
-//       console.error("Error in executeAsModal:", e);
-//     }
-// }
-
+// Translate the currently selected layer using the suggestion logic
 export async function translateSmartObject(smartObject, translation) {
   const smartObjectId = smartObject.id; // extract primitive BEFORE modal
 
@@ -189,16 +110,6 @@ export async function editSmartObject(smartObject) {
       {}
    );
 }
-
-
-
-
-
-
-
-
-
-
 
 
 //Gets the font size of a text layer in real "points" units instead of weird Photoshop units (2.1356666 and such)

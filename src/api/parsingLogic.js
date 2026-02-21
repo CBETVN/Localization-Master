@@ -1,4 +1,3 @@
-
 // import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
 // import { photoshop } from "../globals";
 // Import XLSX - it's a UMD library that may attach to global scope
@@ -226,15 +225,12 @@ export function matchingPhrase(layer, appState) {
   const langEntries = appState.languageData && appState.languageData[selectedLang];
   if (!enEntries || !Array.isArray(enEntries) || !langEntries || !Array.isArray(langEntries)) return null;
 
-  // Preprocess EN lines to uppercase for case-insensitive comparison
   for (let i = 0; i < enEntries.length; i++) {
-    const enLines = parseForTranslation(enEntries[i]).map(line => line.toUpperCase());
-    for (const enLine of enLines) {
-      if (layer.name.toUpperCase() === enLine) {
-        // Return the phrase in the selected language at the same index
-        const phrase = langEntries[i];
-        return phrase !== undefined ? phrase : null;
-      }
+    // Normalize EN phrase: replace all whitespace (tabs, newlines, etc.) with a single space, then uppercase
+    const normalizedEN = enEntries[i].replace(/\s+/g, " ").toUpperCase();
+    if (layer.name.toUpperCase() === normalizedEN) {
+      const phrase = langEntries[i].replace(/\s+/g, " ");
+      return phrase !== undefined ? phrase : null;
     }
   }
   return null;

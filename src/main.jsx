@@ -4,11 +4,13 @@ import { uxp, photoshop} from "./globals";
 import { api } from "./api/api";
 import { TranslateSuggestion } from "./components/TranslateSuggestion";
 import { SuggestionsContainer } from "./components/SuggestionsContainer";
+import { PhraseReference } from "./components/PhraseReference";
 import { LoadFDiskButton } from "./components/LoadFDiskButton";
 import { LoadFURLButton } from "./components/LoadFURLButton";
 import { TranslateAllButton } from "./components/TranslateAllButton";
 import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown";
 import { DataStatusIcon } from "./components/DataStatusIcon";
+import { GenerateSuggestionsButton } from "./components/GenerateSuggestionsButton";
 import * as pl from "./api/parsingLogic";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
@@ -64,38 +66,46 @@ export const App = () => {
 
   // Generate suggestions from your logic
   const handleGenerate = async () => {
-    // Validate that a language is selected
-    if (!selectedLanguage) {
-      api.notify("Please select a language first");
-      return;
-    }
     
-    // Validate that language data exists
-    if (!languageData[selectedLanguage]) {
-      api.notify("No translation data available for selected language");
-      return;
-    }
+    const count = Math.floor(Math.random() * 10) + 1; // random 1–10 suggestions
+    const newSuggestions = Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      text: `Suggestion #${Math.floor(Math.random() * 100)}`,
+      placeholder: ""
+    }));
+    setSuggestions(newSuggestions);
+    // // Validate that a language is selected
+    // if (!selectedLanguage) {
+    //   api.notify("Please select a language first");
+    //   return;
+    // }
     
-    try {
-      setIsProcessing(true);
+    // // Validate that language data exists
+    // if (!languageData[selectedLanguage]) {
+    //   api.notify("No translation data available for selected language");
+    //   return;
+    // }
+    
+    // try {
+    //   setIsProcessing(true);
       
-      // TODO: Replace this with your actual function that returns an array
-      // Example: const phrases = languageData[selectedLanguage];
-      const phrases = ["Example phrase 1", "Example phrase 2", "Example phrase 3"];
+    //   // TODO: Replace this with your actual function that returns an array
+    //   // Example: const phrases = languageData[selectedLanguage];
+    //   const phrases = ["Example phrase 1", "Example phrase 2", "Example phrase 3"];
       
-      // Convert array to suggestion objects
-      const newSuggestions = phrases.map((text, index) => ({
-        id: index + 1,
-        text,
-        placeholder: ""
-      }));
+    //   // Convert array to suggestion objects
+    //   const newSuggestions = phrases.map((text, index) => ({
+    //     id: index + 1,
+    //     text,
+    //     placeholder: ""
+    //   }));
       
-      setSuggestions(newSuggestions);
-    } catch (error) {
-      console.error("Error generating suggestions:", error);
-    } finally {
-      setIsProcessing(false);
-    }
+    //   setSuggestions(newSuggestions);
+    // } catch (error) {
+    //   console.error("Error generating suggestions:", error);
+    // } finally {
+    //   setIsProcessing(false);
+    // }
   };
 
   // Example: Dynamically update suggestion text
@@ -159,20 +169,25 @@ export const App = () => {
             }}>Translate Selected
           </button>
           {/* <button onClick={increment}>Count is {count}</button> */}
-          <button onClick={findLayersPosition}>Complex Alert</button>
           <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
               Update First Suggestion
           </button>
-          
-          <SuggestionsContainer 
-            maxHeight="400px"
-            suggestions={suggestions}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onGenerate={handleGenerate}
-            isProcessing={isProcessing}
-          />
-          <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
+          <div className="translate-selected-container">
+            <GenerateSuggestionsButton onClick={handleGenerate} disabled={isProcessing || !selectedLanguage} />
+            <div className="phrase-reference-container">
+              <SuggestionsContainer 
+                maxHeight="200px"
+                suggestions={suggestions}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onGenerate={handleGenerate}
+                isProcessing={isProcessing}
+              />
+              <PhraseReference/>
+            </div>
+            <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
+          </div>
+          <button onClick={findLayersPosition}>Complex Alert</button>
 
           </div>
         </main>

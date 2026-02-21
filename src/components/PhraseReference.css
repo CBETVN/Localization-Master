@@ -1,0 +1,17 @@
+.phrase-reference {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+  background-color: var(--background-color, #2d2d2d);
+  border-radius: 10px;
+}
+
+#phrase-reference-textarea {
+  border: 1px dashed #888;
+  background: #7b00ff;
+  color: #fff;
+  /* min-width: 200px;
+  min-height: 200px; */
+}
+
