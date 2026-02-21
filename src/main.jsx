@@ -9,6 +9,7 @@ import { LoadFURLButton } from "./components/LoadFURLButton";
 import { TranslateAllButton } from "./components/TranslateAllButton";
 import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown";
 import { DataStatusIcon } from "./components/DataStatusIcon";
+import * as pl from "./api/parsingLogic";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
 const { app, core, action } = photoshop;
@@ -153,9 +154,9 @@ export const App = () => {
           <TranslateAllButton appState={appState} />
           <div className="card">
             <button onClick={async () => {
-            const activeLayer = app.activeDocument.activeLayers[0];
-            const info = await api.doesSelectedSOhaveInstances(activeLayer);
-            }}>Check Layer Info
+            // const activeLayer = app.activeDocument.activeLayers[0];
+            const info = await pl.translateSelectedLayer(appState);
+            }}>Translate Selected
           </button>
           {/* <button onClick={increment}>Count is {count}</button> */}
           <button onClick={findLayersPosition}>Complex Alert</button>

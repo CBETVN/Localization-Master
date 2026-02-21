@@ -1,6 +1,6 @@
 
-import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
-
+// import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
+// import { photoshop } from "../globals";
 // Import XLSX - it's a UMD library that may attach to global scope
 import "../lib/xlsx.full.min.js";
 import { uxp } from "../globals";
@@ -9,6 +9,9 @@ import * as ps from "./photoshop.js"; // Import all Photoshop API functions as p
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
+const { app } = photoshop;
+const { executeAsModal } = photoshop.core;
+const { batchPlay } = photoshop.action;
 
 /**
  * Parse Excel file and extract language data
@@ -80,48 +83,17 @@ function extractLanguageData(workbook) {
   return { languageData, availableLanguages };
 }
 
-//parse a phrase into lines and ignore lines with () or [] (like [NUMBER])
-export function parseForTranslation(text) {
-  return text
-    .split('\n') // Split into lines
-    .map(line => line.trim()) // Remove extra spaces
-    .filter(line => line && !line.includes('(') && !line.includes('[')); // Ignore lines with () or []
-}
-
-
-// Checks if a layer name matches any line in the EN phrases array from appState.languageData
-export function isNameInEN(layerName, appState) {
-  const engKey = appState.languageData && appState.languageData["EN"];
-  if (!engKey || !Array.isArray(engKey)) return false;
-  for (const entry of engKey) {
-    const lines = entry.split('\n').map(line => line.trim());
-      // Split, trim, and filter out lines with (), [], or {}
-      const validLines = entry
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !/[\[\](){}]/.test(line));
-      const joined = validLines.join(' ');
-      if (joined === layerName) {
-      return true;
-    }
-  }
-  return false;
-}
-
-
-
-
 
 
 // Translates all visible group layers whose names match EN entries, in a modal scope
 export async function translateAll(appState) {
   // Validate required state
   if (!appState.selectedLanguage) {
-    photoshop.app.showAlert("Please select a language first");
+    app.showAlert("Please select a language first");
     return;
   }
   if (!appState.languageData || !appState.languageData["EN"]) {
-    photoshop.app.showAlert("No English language data loaded.");
+    app.showAlert("No English language data loaded.");
     return;
   }
 
@@ -130,29 +102,17 @@ export async function translateAll(appState) {
 
   for (const layer of allLayers) {
     let parentFolder = ps.getParentFolder(layer);
-    if (parentFolder !== null && layer.visible === true && isNameInEN(parentFolder, appState)) {
+    if (parentFolder !== null && layer.visible === true && isNameENPhrase(parentFolder, appState)) {
       // console.log(`Layer: ${layer.name} is in matching parent folder: ${parentFolder} and will be translated by using "translateByFolder" function`);
       console.log("+1");
     } else if (layer.visible === true ) {
       // console.log(`Layer name: ${layer.name}`);
       // console.log(`Layer: ${layer.name} has no parent folder but is visible, checking if it matches EN list and will be translated by using "compareLayerTextToEN" function`);
-      compareLayerTextToEN(layer, appState);
+      compareLayerNameToEN(layer, appState);
     }
   
   }
 }
-
-
-
-
-
-export function getChildrenLayers(layer) {
-    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
-        return layer.layers;
-    }
-    return [];
-}
-
 
 
 // Serch for parent folder and translate
@@ -161,7 +121,7 @@ export function translateByFolder(appState, allLayers) {
     for (const layer of allLayers) {
       // Only process visible group layers
       if (ps.isLayerAGroup(layer) && layer.visible === true) {
-        if (isNameInEN(layer.name, appState)) {
+        if (isNameENPhrase(layer.name, appState)) {
           console.log(`Layer: ${layer.name} is in EN list and will be translated`);
           // Example action: hide the layer (replace with translation logic)
           // layer.visible = false;
@@ -182,8 +142,64 @@ export function translateByFolder(appState, allLayers) {
 }
 
 
-// Compare layer.text to parsed EN lines, log and break on first match
-export function compareLayerTextToEN(layer, appState) {
+
+
+
+
+
+
+////////////// Helper functions //////////////////////
+
+
+
+
+
+
+
+
+//parse a phrase into lines and ignore lines with () or [] (like [NUMBER])
+export function parseForTranslation(text) {
+  return text
+    .split('\n') // Split into lines
+    .map(line => line.trim()) // Remove extra spaces
+    .filter(line => line && !line.includes('(') && !line.includes('[')); // Ignore lines with () or []
+}
+
+
+// Checks if a layer name matches any line in the EN phrases array from appState.languageData
+export function isNameENPhrase(layerName, appState) {
+  const engKey = appState.languageData && appState.languageData["EN"];
+  if (!engKey || !Array.isArray(engKey)) return false;
+  for (const entry of engKey) {
+    const lines = entry.split('\n').map(line => line.trim());
+      // Split, trim, and filter out lines with (), [], or {}
+      const validLines = entry
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !/[\[\](){}]/.test(line));
+      const joined = validLines.join(' ');
+      if (joined === layerName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+export function getChildrenLayers(layer) {
+    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
+        return layer.layers;
+    }
+    return [];
+}
+
+
+
+
+
+
+// Compare layer.name to parsed EN lines, log and break on first match
+export function compareLayerNameToEN(layer, appState) {
   const enEntries = appState.languageData && appState.languageData["EN"];
   if (!enEntries || !Array.isArray(enEntries)) return false;
   // Preprocess all EN lines to uppercase for case-insensitive comparison
@@ -199,4 +215,43 @@ export function compareLayerTextToEN(layer, appState) {
     return true;
   }
   return false;
+}
+
+
+
+//Temporary function to generate suggestions based on selected language - replace with actual logic
+export function matchingPhrase(layer, appState) {
+  const enEntries = appState.languageData && appState.languageData["EN"];
+  const selectedLang = appState.selectedLanguage;
+  const langEntries = appState.languageData && appState.languageData[selectedLang];
+  if (!enEntries || !Array.isArray(enEntries) || !langEntries || !Array.isArray(langEntries)) return null;
+
+  // Preprocess EN lines to uppercase for case-insensitive comparison
+  for (let i = 0; i < enEntries.length; i++) {
+    const enLines = parseForTranslation(enEntries[i]).map(line => line.toUpperCase());
+    for (const enLine of enLines) {
+      if (layer.name.toUpperCase() === enLine) {
+        // Return the phrase in the selected language at the same index
+        const phrase = langEntries[i];
+        return phrase !== undefined ? phrase : null;
+      }
+    }
+  }
+  return null;
+}
+
+
+
+export async function translateSelectedLayer(appState) {
+  console.log("Translating selected layer...");
+  const activeLayer = app.activeDocument.activeLayers[0];
+  if (!activeLayer) return;
+
+  const suggestion = matchingPhrase(activeLayer, appState);
+  if (suggestion) {
+    console.log("Suggestion found:", suggestion);
+    await ps.translateSmartObject(activeLayer, suggestion);
+  } else {
+    console.log("No matching phrase found for selected layer.");
+  }
 }
