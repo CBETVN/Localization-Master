@@ -5,7 +5,6 @@ import "../lib/xlsx.full.min.js";
 import { uxp } from "../globals";
 import { photoshop } from "../globals";
 import * as ps from "./photoshop.js"; // Import all Photoshop API functions as ps
-import { parse } from "dotenv";
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
