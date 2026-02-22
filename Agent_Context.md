@@ -99,6 +99,65 @@ The Excel file has this structure:
 
 ---
 
+## Sample Translation Data
+
+> The following is a sample of the actual translation table, converted from the original `.xlsx` file. It illustrates the real structure, content, and edge cases the plugin must handle — including multiline phrases, `[NUMBER]` placeholders, `(do not translate)` markers, missing cells, and entries that only cover a subset of languages.
+
+```csv
+Screen preview,EN,DE,HR,EL,IT,RO,PT,ES,MK,SQ,SR,UK,RU,TR,HU,CS,PT-BR,NL,DA,FR,PL,ZH-CN,SK,SL,SV,ET,KO,KA,LV,LT,,,
+,"CONGRATULATIONS
+YOU WIN
+[NUMBER]
+FREE SPINS","HERZLICHEN GLÜCKWUNSCH
+SIE GEWINNEN
+[NUMBER]
+FREISPIELE",...
+,"+ [NUMBER]
+FREE SPINS
+WITH INCREASED MULTIPLIERS","+ [NUMBER]
+FREISPIELE
+MIT ERHÖHTEN MULTIPLIKATOREN",...
+,"TOTAL
+WON",GESAMTGEWINN,...
+,"TOTAL
+CREDITS
+WON","GESAMTZAHL 
+GEWONNER CREDITS",...
+,"FREE SPINS
+
+[NUMBER]  OF [NUMBER]  ","FREISPIELE
+
+[NUMBER] VON [NUMBER]",...
+,"SUPER (do not translate!)
+FREE SPINS
+[NUMBER]  OF [NUMBER] ","SUPER
+FREISPIELE
+(value) VON (value)",...
+,MULTIPLIERS,MULTIPLIKATOREN,...
+,BUY BONUS,"BONUS 
+KAUFEN",...
+,ACTIVE,AKTIV,...
+,RESPIN,Neudreh,...
+,YOU WIN,SIE GEWINNEN,...
+,WIN,GEWINN,...
+,COLLECTED,EINGESAMMELT,...
+,BACK IN THE GAME,ZURÜCK IM SPIEL,...
+,1 free respin,1 kostenloser Neudreh,...
+,SELECT FREE SPINS,Freispiele auswählen,...
+,0 SPINS REMAINING,0 VERBLEIBENDE DREHS,...
+,SPINS COMPLETED,ABGESCHLOSSENE DREHS,...
+```
+
+**Key observations from real data:**
+- Many cells are empty for certain languages (arrays must stay index-aligned with empty string fallback)
+- `[NUMBER]`, `(value)`, `(do not translate!)` markers appear inside phrases
+- Some EN entries span 4–5 lines with `\n`
+- `Screen Preview` column and trailing empty columns must be ignored
+- Some rows have content only in EN + DE (partial translations)
+- `SUPER (do not translate!)` lines must be skipped during translation
+
+---
+
 ## PSD File Conventions
 
 ### Clean Convention

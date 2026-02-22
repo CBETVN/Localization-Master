@@ -66,46 +66,37 @@ export const App = () => {
 
   // Generate suggestions from your logic
   const handleGenerate = async () => {
-    
-    const count = Math.floor(Math.random() * 10) + 1; // random 1–10 suggestions
-    const newSuggestions = Array.from({ length: count }, (_, i) => ({
-      id: i + 1,
-      text: `Suggestion #${Math.floor(Math.random() * 100)}`,
+      const activeLayer = app.activeDocument.activeLayers[0];
+  if (!activeLayer) {
+    api.notify("No layer selected.");
+    return;
+  }
+
+  try {
+    setIsProcessing(true);
+    const phrases = await pl.generateSuggestions(activeLayer, appState);
+    if (!phrases) return;
+
+    const newSuggestions = phrases.map((text, index) => ({
+      id: index + 1,
+      text,
       placeholder: ""
     }));
+
     setSuggestions(newSuggestions);
-    // // Validate that a language is selected
-    // if (!selectedLanguage) {
-    //   api.notify("Please select a language first");
-    //   return;
-    // }
+  } catch (error) {
+    console.error("Error generating suggestions:", error);
+  } finally {
+    setIsProcessing(false);
+  }
     
-    // // Validate that language data exists
-    // if (!languageData[selectedLanguage]) {
-    //   api.notify("No translation data available for selected language");
-    //   return;
-    // }
-    
-    // try {
-    //   setIsProcessing(true);
-      
-    //   // TODO: Replace this with your actual function that returns an array
-    //   // Example: const phrases = languageData[selectedLanguage];
-    //   const phrases = ["Example phrase 1", "Example phrase 2", "Example phrase 3"];
-      
-    //   // Convert array to suggestion objects
-    //   const newSuggestions = phrases.map((text, index) => ({
-    //     id: index + 1,
-    //     text,
-    //     placeholder: ""
-    //   }));
-      
-    //   setSuggestions(newSuggestions);
-    // } catch (error) {
-    //   console.error("Error generating suggestions:", error);
-    // } finally {
-    //   setIsProcessing(false);
-    // }
+    // const count = Math.floor(Math.random() * 10) + 1; // random 1–10 suggestions
+    // const newSuggestions = Array.from({ length: count }, (_, i) => ({
+    //   id: i + 1,
+    //   text: `Suggestion #${Math.floor(Math.random() * 100)}`,
+    //   placeholder: ""
+    // }));
+    // setSuggestions(newSuggestions);
   };
 
   // Example: Dynamically update suggestion text
