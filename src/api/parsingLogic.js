@@ -5,6 +5,7 @@ import "../lib/xlsx.full.min.js";
 import { uxp } from "../globals";
 import { photoshop } from "../globals";
 import * as ps from "./photoshop.js"; // Import all Photoshop API functions as ps
+import { parse } from "dotenv";
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
@@ -144,14 +145,78 @@ export function translateByFolder(appState, allLayers) {
 
 
 
+export async function translateSelectedLayer(appState) {
+  console.log("Translating selected layer...");
+  const activeLayer = app.activeDocument.activeLayers[0];
+  if (!activeLayer) return;
+
+  const suggestion = extractMatchingPhrase(activeLayer, appState);
+  if (suggestion) {
+    console.log("Suggestion found:", suggestion);
+    await ps.translateSmartObject(activeLayer, suggestion);
+  } else {
+    console.log("No matching phrase found for selected layer.");
+  }
+}
+
+
+export async function generateSuggestions(layer, appState) {
+  let parentFolder = layer.parent;
+  if (!parentFolder) {
+    app.showAlert("Cant find phrase reference for this layer.");
+    return null;
+  }
+
+  if (extractMatchingPhrase(parentFolder, appState)) {
+    const suggestion = extractMatchingPhrase(layer, appState);
+    if (!suggestion) {
+      app.showAlert("No matching translation found for this layer.");
+      return null;
+    }
+    return parsePhraseForSuggestions(suggestion);
+  }
+
+  app.showAlert("Parent folder does not match any EN phrase.");
+  return null;
+}
 
 
 
 ////////////// Helper functions //////////////////////
 
 
+// Parses a newline-delimited phrase into an array of translation candidates.
+// Returns individual lines, individual words, adjacent line pairs, and the full phrase joined by spaces.
+// Used to maximize matching coverage against the EN translation table.
 
+export function parsePhraseForSuggestions(phrase) {
+    // Split into lines, trim, strip trailing punctuation
+  const lines = phrase
+    .split("\n")
+    .map(l => l.trim().replace(/[.,!?]+$/, ""))
+    .filter(Boolean);
 
+  const results = new Set();
+
+  // 1. Individual lines as-is
+  lines.forEach(line => results.add(line));
+
+  // 2. Individual words from each line
+  lines.forEach(line => {
+    line.split(/\s+/).forEach(word => results.add(word));
+  });
+
+  // 3. Sliding window — adjacent line pairs joined with space
+  for (let i = 0; i < lines.length - 1; i++) {
+    results.add(lines[i] + " " + lines[i + 1]);
+  }
+
+  // 4. Full phrase — all lines joined with space
+  results.add(lines.join(" "));
+
+  return Array.from(results);
+
+}
 
 
 
@@ -219,7 +284,7 @@ export function compareLayerNameToEN(layer, appState) {
 
 
 //Temporary function to generate suggestions based on selected language - replace with actual logic
-export function matchingPhrase(layer, appState) {
+export function extractMatchingPhrase(layer, appState) {
   const enEntries = appState.languageData && appState.languageData["EN"];
   const selectedLang = appState.selectedLanguage;
   const langEntries = appState.languageData && appState.languageData[selectedLang];
@@ -237,17 +302,3 @@ export function matchingPhrase(layer, appState) {
 }
 
 
-
-export async function translateSelectedLayer(appState) {
-  console.log("Translating selected layer...");
-  const activeLayer = app.activeDocument.activeLayers[0];
-  if (!activeLayer) return;
-
-  const suggestion = matchingPhrase(activeLayer, appState);
-  if (suggestion) {
-    console.log("Suggestion found:", suggestion);
-    await ps.translateSmartObject(activeLayer, suggestion);
-  } else {
-    console.log("No matching phrase found for selected layer.");
-  }
-}

@@ -148,6 +148,13 @@ p {
    width: 100%;
  }
 
+.translate-selected-container > * {
+  min-width: 200px;
+  max-width: 400px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .suggestion-boxes {
   display: flex;
   gap: 10px;
