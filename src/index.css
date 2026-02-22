@@ -146,11 +146,13 @@ p {
    display: flex;
    flex-direction: column;
    width: 100%;
+   /* background-color: blueviolet; */
  }
 
 .translate-selected-container > * {
   min-width: 200px;
   max-width: 400px;
+  /* padding: 20px; */
   width: 100%;
   box-sizing: border-box;
 }

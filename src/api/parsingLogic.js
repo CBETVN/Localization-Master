@@ -214,6 +214,49 @@ export async function generateSuggestions(layer, appState) {
 ////////////// Helper functions //////////////////////
 
 
+
+/**
+ * Parses a raw phrase string into different representations based on the requested mode.
+ * Strips (…) annotations in all modes.
+ * Modes:
+ *   "raw"      — returns phrase with \n intact and [] preserved, only (…) stripped
+ *   "oneLiner" — collapses all lines into one space-separated string, [] content stripped
+ *   "withLines"— returns array of individual words across all lines, [] content stripped
+ *   "strict"   — same as oneLiner but drops entire lines that contain [...] placeholders
+ */
+export function parseRawPhrase(phrase, mode = "oneLiner") {
+
+  // strip (…) annotations in ALL modes
+  const cleaned = phrase.replace(/\(.*?\)/g, "").replace(/\s+\n/g, "\n").trim();
+
+  // raw — return with \n intact, [] preserved, just (…) stripped
+  if (mode === "raw") return cleaned;
+
+  // strip […] placeholders and split into lines
+  const lines = cleaned
+    .split("\n")
+    .map(l => l.trim().replace(/\[.*?\]/g, "").trim())
+    .filter(Boolean);
+
+  // oneLiner — all lines collapsed into one space-separated string
+  if (mode === "oneLiner") return lines.join(" ").replace(/\s+/g, " ").trim();
+
+  // withLines — individual words from all lines, one per entry
+  if (mode === "linesArray") return lines.flatMap(l => l.split(/\s+/)).filter(Boolean);
+
+  // test — remove entire line if it contains [...], keep rest as oneLiner
+  if (mode === "strict") {
+    const strictLines = cleaned
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l && !/\[.*?\]/.test(l));
+    return strictLines.join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  throw new Error(`parseRawPhrase: unknown mode "${mode}"`);
+}
+
+
 // Parses a newline-delimited phrase into an array of translation candidates.
 // Returns individual lines, individual words, adjacent line pairs, and the full phrase joined by spaces.
 // Used to maximize matching coverage against the EN translation table.
@@ -321,11 +364,11 @@ export function extractMatchingPhrase(layer, appState) {
 
   for (let i = 0; i < enEntries.length; i++) {
     // Normalize EN phrase: replace all whitespace (tabs, newlines, etc.) with a single space, then uppercase
-    const normalizedEN = enEntries[i].replace(/\s+/g, " ").toUpperCase();
+    const normalizedEN = parseRawPhrase(enEntries[i], "strict");
     // console.log(`Comparing: "${layer.name.toUpperCase().trim()}" vs "${normalizedEN}"`);
 
-    if (layer.name.toUpperCase() === normalizedEN) {
-      const phrase = langEntries[i].replace(/\s+/g, " ");
+    if (layer.name.toUpperCase() === normalizedEN.toUpperCase()) {
+      const phrase = parseRawPhrase(langEntries[i], "strict"); // Get the corresponding phrase in the selected language
       // console.log(`Layer name: ${layer.name}, Phrase: ${enEntries[i]}, Suggestion: ${phrase}`);
       return phrase !== undefined ? phrase : null;
     }

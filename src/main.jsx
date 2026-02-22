@@ -66,37 +66,31 @@ export const App = () => {
 
   // Generate suggestions from your logic
   const handleGenerate = async () => {
-      const activeLayer = app.activeDocument.activeLayers[0];
-  if (!activeLayer) {
-    api.notify("No layer selected.");
-    return;
-  }
 
-  try {
-    setIsProcessing(true);
-    const phrases = await pl.generateSuggestions(activeLayer, appState);
-    if (!phrases) return;
+    setSelectedId(null); // ← reset selection before generating new list
+    const activeLayer = app.activeDocument.activeLayers[0];
+    if (!activeLayer) {
+      api.notify("No layer selected.");
+      return;
+    }
 
-    const newSuggestions = phrases.map((text, index) => ({
-      id: index + 1,
-      text,
-      placeholder: ""
-    }));
+    try {
+      setIsProcessing(true);
+      const phrases = await pl.generateSuggestions(activeLayer, appState);
+      if (!phrases) return;
 
-    setSuggestions(newSuggestions);
-  } catch (error) {
-    console.error("Error generating suggestions:", error);
-  } finally {
-    setIsProcessing(false);
-  }
-    
-    // const count = Math.floor(Math.random() * 10) + 1; // random 1–10 suggestions
-    // const newSuggestions = Array.from({ length: count }, (_, i) => ({
-    //   id: i + 1,
-    //   text: `Suggestion #${Math.floor(Math.random() * 100)}`,
-    //   placeholder: ""
-    // }));
-    // setSuggestions(newSuggestions);
+      const newSuggestions = phrases.map((text, index) => ({
+        id: index + 1,
+        text,
+        placeholder: ""
+      }));
+
+      setSuggestions(newSuggestions);
+    } catch (error) {
+      console.error("Error generating suggestions:", error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Example: Dynamically update suggestion text
