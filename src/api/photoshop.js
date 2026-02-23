@@ -216,50 +216,42 @@ export function getAllLayers(layers) {
   return allLayers;
 }
 
-export async function doesSelectedSOhaveInstances(layer) {
-  // Get the target layer's info
-  if (!layer) {
-    layer = photoshop.app.activeDocument.activeLayers[0];
-  }
-  
+
+
+
+
+// Returns an array of layer references that share the same Smart Object ID as the passed layer.
+// Returns null if the passed layer is not a Smart Object.
+// Caller can check: result === null (not a SO), result.length (instance count)
+export async function getSmartObjectInstances(layer) {
   const layerInfo = await getLayerInfo(layer);
-  
-  // Check if it's a SmartObject
-  if (!layerInfo.smartObject) {
-    console.log("This is not a SmartObject");
-    return { isSmartObject: false, instances: [] };
+
+  if (!layerInfo.smartObjectMore) {
+    console.log(`Layer "${layer.name}" is not a Smart Object.`);
+    return null;
   }
-  
+
   const targetSOid = layerInfo.smartObjectMore.ID;
-  
-  console.log("Looking for instances of:", layer.name, "and SmartObject ID:", targetSOid);
-  
-  // Get all layers in the document (including nested)
-  const doc = photoshop.app.activeDocument;
-  const allLayers = getAllLayers(doc.layers);
-  
-  // Check each layer to see if it shares the same SmartObject ID
+  const allLayers = getAllLayers(app.activeDocument.layers);
+
+  const requests = allLayers.map(l => ({
+    _obj: "get",
+    _target: [{ _ref: "layer", _id: l.id }]
+  }));
+
+  const allInfos = await batchPlay(requests, { synchronousExecution: true });
+
   const instances = [];
-  
-  for (const l of allLayers) {
-    const info = await getLayerInfo(l);
-    
-    if (info && info.smartObjectMore?.ID === targetSOid) {
-      instances.push({
-        id: l.id,
-        name: l.name
-      });
+
+  allInfos.forEach((info, index) => {
+    if (info.smartObjectMore?.ID === targetSOid) {
+      instances.push(allLayers[index]);
     }
-  }
-  
-  console.log(`Found ${instances.length} instance(s)`);
-  
-  return {
-    isSmartObject: true,
-    smartObjectID: targetSOid,
-    instanceCount: instances.length,
-    instances: instances
-  };
+  });
+
+  console.log(`Found ${instances.length} instance(s) of "${layer.name}"`);
+
+  return instances;
 }
 
 // export async function findSmartObjectInstances(targetLayerId) {
@@ -285,7 +277,7 @@ export function getParentFolder(layer) {
       return null;
     } else {
       // console.log("Parent folder is:", layer.parent.name);
-      return layer.parent.name;
+      return layer.parent;
     }
   } catch (error) {
     console.error("Error accessing parent folder:", error);
@@ -304,3 +296,5 @@ export function isLayerAGroup(layer) {
   // }
   return false;
 }
+
+

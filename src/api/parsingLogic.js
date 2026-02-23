@@ -8,7 +8,7 @@ import * as ps from "./photoshop.js"; // Import all Photoshop API functions as p
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
-const { app } = photoshop;
+const { app, constants } = photoshop;
 const { executeAsModal } = photoshop.core;
 const { batchPlay } = photoshop.action;
 
@@ -114,7 +114,45 @@ function extractLanguageData(workbook) {
   return { languageData, availableLanguages };
 }
 
+
+
+
+// // Back Up Translates all visible group layers whose names match EN entries,
+// export async function translateAll(appState) {
+//   // Validate required state
+//   if (!appState.selectedLanguage) {
+//     app.showAlert("Please select a language first");
+//     return;
+//   }
+//   if (!appState.languageData || !appState.languageData["EN"]) {
+//     app.showAlert("No English language data loaded.");
+//     return;
+//   }
+//   // Push all instances of the about-to-be-translated layer so they dont get processed again unnessaryly
+//   let instances = [];
+//   const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
+
+//   for (const layer of allLayers) {
+//     let parentFolder = ps.getParentFolder(layer);
+//     if (parentFolder !== null && layer.visible === true && isNameENPhrase(parentFolder.name, appState)) {
+//       console.log(`Layer: ${layer.name} is in matching parent folder: ${parentFolder.name} and will be translated by using "translateByFolder" function`);
+//       console.log("matched parent folder: " + parentFolder.name);
+//     } else if (layer.visible === true ) {
+//       // console.log(`Layer name: ${layer.name}`);
+//       // console.log(`Layer: ${layer.name} has no parent folder but is visible, checking if it matches EN list and will be translated by using "compareLayerTextToEN" function`);
+//       compareLayerNameToEN(layer, appState);
+//     }
+  
+//   }
+// }
+
+
+
 // Translates all visible group layers whose names match EN entries, in a modal scope
+
+
+
+
 export async function translateAll(appState) {
   // Validate required state
   if (!appState.selectedLanguage) {
@@ -125,23 +163,53 @@ export async function translateAll(appState) {
     app.showAlert("No English language data loaded.");
     return;
   }
-
-  let instances = [];
+  // Push all instances of the about-to-be-translated layer so they dont get processed again unnessaryly
+  
   const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
 
+  const instances = new Set();
+  const alreadyProcessed = new Set();
+
   for (const layer of allLayers) {
-    let parentFolder = ps.getParentFolder(layer);
-    if (parentFolder !== null && layer.visible === true && isNameENPhrase(parentFolder, appState)) {
-      // console.log(`Layer: ${layer.name} is in matching parent folder: ${parentFolder} and will be translated by using "translateByFolder" function`);
-      console.log("+1");
-    } else if (layer.visible === true ) {
-      // console.log(`Layer name: ${layer.name}`);
-      // console.log(`Layer: ${layer.name} has no parent folder but is visible, checking if it matches EN list and will be translated by using "compareLayerTextToEN" function`);
-      compareLayerNameToEN(layer, appState);
+    if (!layer.visible) continue;
+    if (alreadyProcessed.has(layer.id)) continue;
+    if (instances.has(layer.id)) continue; // Skip if this layer is already identified as an instance of a previously processed Smart Object
+    const layerInstances = await ps.getSmartObjectInstances(layer);
+    const isItSmartObject = layerInstances !== null;
+
+
+    if (ps.isLayerAGroup(layer) && isNameENPhrase(layer.name, appState)) {
+      console.log(`Matched folder: ${layer.name} - harvesting contents`);
+      // harvest(layer, appState);
+      // collectAllIds(layer).forEach(id => alreadyProcessed.add(id));
+
+    } else if (isItSmartObject) {
+      layerInstances.forEach(instance => {
+        instances.add(instance);
+        console.log(instance.name);
+      });
+
+      // compareLayerNameToEN(layer, appState);
     }
-  
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Serch for parent folder and translate
@@ -195,19 +263,13 @@ export async function generateSuggestions(layer, appState) {
     app.showAlert("Cant find phrase reference for this layer.");
     return null;
   }
-
-  if (extractMatchingPhrase(parentFolder, appState)) {
-    const suggestion = extractMatchingPhrase(parentFolder, appState);
+  const suggestion = extractMatchingPhrase(parentFolder, appState);
+  if (suggestion) { 
     console.log("Suggestion found:", suggestion);
-    if (!suggestion) {
-      app.showAlert("No matching translation found for this layer.");
-      return null;
-    }
     return parsePhraseForSuggestions(suggestion);
-  }
-
-  app.showAlert("Parent folder does not match any EN phrase.");
-  return null;
+  }else {
+    app.showAlert("Parent folder does not match any EN phrase.");
+      return null;}
 }
 
 

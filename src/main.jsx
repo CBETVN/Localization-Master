@@ -128,7 +128,6 @@ export const App = () => {
   }
 
 
-
   return (
     <>
       {!webviewUI ? (
@@ -168,7 +167,7 @@ export const App = () => {
                 onGenerate={handleGenerate}
                 isProcessing={isProcessing}
               />
-              <PhraseReference/>
+              {/* <PhraseReference/> */}
             </div>
             <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
           </div>
