@@ -117,91 +117,97 @@ function extractLanguageData(workbook) {
 
 
 
-// // Back Up Translates all visible group layers whose names match EN entries,
-// export async function translateAll(appState) {
-//   // Validate required state
-//   if (!appState.selectedLanguage) {
-//     app.showAlert("Please select a language first");
-//     return;
-//   }
-//   if (!appState.languageData || !appState.languageData["EN"]) {
-//     app.showAlert("No English language data loaded.");
-//     return;
-//   }
-//   // Push all instances of the about-to-be-translated layer so they dont get processed again unnessaryly
-//   let instances = [];
-//   const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
-
-//   for (const layer of allLayers) {
-//     let parentFolder = ps.getParentFolder(layer);
-//     if (parentFolder !== null && layer.visible === true && isNameENPhrase(parentFolder.name, appState)) {
-//       console.log(`Layer: ${layer.name} is in matching parent folder: ${parentFolder.name} and will be translated by using "translateByFolder" function`);
-//       console.log("matched parent folder: " + parentFolder.name);
-//     } else if (layer.visible === true ) {
-//       // console.log(`Layer name: ${layer.name}`);
-//       // console.log(`Layer: ${layer.name} has no parent folder but is visible, checking if it matches EN list and will be translated by using "compareLayerTextToEN" function`);
-//       compareLayerNameToEN(layer, appState);
-//     }
-  
-//   }
-// }
-
-
-
-// Translates all visible group layers whose names match EN entries, in a modal scope
-
-
-
-
+/**
+ * Scans all visible layers in the active document and identifies unique Smart Objects
+ * and matching EN folder names for translation.
+ *
+ * Fetches all layer info in a single batchPlay call upfront to avoid redundant
+ * Photoshop API calls during the loop. Deduplicates Smart Object instances using
+ * their shared SO ID so each unique Smart Object is processed only once.
+ *
+ * @param {Object} appState - Application state.
+ * @param {string} appState.selectedLanguage - The target language code (e.g. "DE", "SK").
+ * @param {Object} appState.languageData - Map of language code -> array of phrases.
+ */
 export async function translateAll(appState) {
-  // Validate required state
+  const startTime = Date.now();
   if (!appState.selectedLanguage) {
     app.showAlert("Please select a language first");
     return;
   }
-  if (!appState.languageData || !appState.languageData["EN"]) {
+  if (!appState.languageData?.["EN"]) {
     app.showAlert("No English language data loaded.");
     return;
   }
-  // Push all instances of the about-to-be-translated layer so they dont get processed again unnessaryly
-  
-  const allLayers = ps.getAllLayers(photoshop.app.activeDocument.layers);
 
-  const instances = new Set();
-  const alreadyProcessed = new Set();
+  const allLayers = ps.getAllLayers(app.activeDocument.layers);
+  const layerIndexMap = new Map(allLayers.map((l, i) => [l.id, i]));
+
+  // Single batchPlay fetch for all layers
+  const allInfos = await batchPlay(
+    allLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+    { synchronousExecution: true }
+  );
+
+  const smartObjectInstances = new Set();
+  let processedLayers = 0;
+  let uniqueSOsFound = 0;
 
   for (const layer of allLayers) {
-    if (!layer.visible) continue;
-    if (alreadyProcessed.has(layer.id)) continue;
-    if (instances.has(layer.id)) continue; // Skip if this layer is already identified as an instance of a previously processed Smart Object
-    const layerInstances = await ps.getSmartObjectInstances(layer);
-    const isItSmartObject = layerInstances !== null;
+    if (!layer.visible || smartObjectInstances.has(layer.id)) continue;
 
-
-    if (ps.isLayerAGroup(layer) && isNameENPhrase(layer.name, appState)) {
-      console.log(`Matched folder: ${layer.name} - harvesting contents`);
-      // harvest(layer, appState);
-      // collectAllIds(layer).forEach(id => alreadyProcessed.add(id));
-
-    } else if (isItSmartObject) {
-      layerInstances.forEach(instance => {
-        instances.add(instance);
-        console.log(instance.name);
-      });
-
-      // compareLayerNameToEN(layer, appState);
+    if (ps.isLayerAGroup(layer)) {
+      if (isNameENPhrase(layer.name, appState)) {
+        processedLayers++;
+        console.log(`Layer: ${layer.name} is a matching folder`);
+        await processMatchedFolder(layer, appState);
+      }
+      continue;
     }
+
+    if (layer.kind !== constants.LayerKind.SMARTOBJECT) continue;
+
+    const layerInstances = ps.getSmartObjectInstances(layer, allLayers, allInfos, layerIndexMap);
+    if (!layerInstances) continue;
+    processedLayers++;
+    uniqueSOsFound++;
+    layerInstances.forEach(instance => {
+      smartObjectInstances.add(instance.id);
+      console.log(instance.name);
+    });
   }
+
+  console.log(`Total layers: ${allLayers.length}`);
+  console.log(`Processed ${processedLayers} layers, found ${uniqueSOsFound} unique SOs with ${smartObjectInstances.size} total instances.`);
+  console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
 }
 
 
 
 
 
+export async function processMatchedFolder(folderLayer, appState) {
+    const rawTranslation = extractMatchingPhrase(folderLayer, appState);
+    if (!rawTranslation) return;
 
+    const chunks = parseRawPhrase(rawTranslation, "linesArray");
+    const children = [...folderLayer.layers].reverse();
+    const count = Math.min(chunks.length, children.length);
 
+    for (let i = 0; i < count; i++) {
+        const layer = children[i];
+        const chunk = chunks[i];
 
+        if (!layer.visible) continue;
 
+        if (layer.kind === constants.LayerKind.SMARTOBJECT) {
+            await ps.translateSmartObject(layer, chunk);
+
+        } else if (layer.kind === constants.LayerKind.TEXT) {
+            console.log(`Text layer — not yet implemented: "${layer.name}", chunk: "${chunk}"`);
+        }
+    }
+}
 
 
 

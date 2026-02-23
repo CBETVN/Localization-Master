@@ -33,6 +33,11 @@ export async function translateSmartObject(smartObject, translation) {
 
   try {
     await executeAsModal(async () => {
+      await batchPlay([{
+          _obj: "select",
+          _target: [{ _ref: "layer", _id: smartObjectId }],
+          _options: { dialogOptions: "silent" }
+      }], { synchronousExecution: true });
       // Re-fetch fresh layer reference INSIDE the modal
       const allDocLayers = getAllLayers(app.activeDocument.layers);
       const freshSmartObject = allDocLayers.find(l => l.id === smartObjectId);
@@ -218,13 +223,19 @@ export function getAllLayers(layers) {
 
 
 
-
-
-// Returns an array of layer references that share the same Smart Object ID as the passed layer.
-// Returns null if the passed layer is not a Smart Object.
-// Caller can check: result === null (not a SO), result.length (instance count)
-export async function getSmartObjectInstances(layer) {
-  const layerInfo = await getLayerInfo(layer);
+/**
+ * Returns all layers that share the same Smart Object ID as the given layer.
+ * Operates entirely in memory using pre-fetched layer data — no Photoshop API calls.
+ *
+ * @param {Layer} layer - The reference Smart Object layer to match against.
+ * @param {Layer[]} allLayers - Flat array of all document layers (from getAllLayers).
+ * @param {Object[]} allInfos - batchPlay info objects for all layers, same order as allLayers.
+ * @param {Map<number, number>} layerIndexMap - Map of layer.id -> index in allLayers for O(1) lookup.
+ * @returns {Layer[]|null} Array of matching instances, or null if the layer is not a Smart Object.
+ */
+export function getSmartObjectInstances(layer, allLayers, allInfos, layerIndexMap) {
+  const idx = layerIndexMap.get(layer.id);
+  const layerInfo = allInfos[idx];
 
   if (!layerInfo.smartObjectMore) {
     console.log(`Layer "${layer.name}" is not a Smart Object.`);
@@ -232,40 +243,12 @@ export async function getSmartObjectInstances(layer) {
   }
 
   const targetSOid = layerInfo.smartObjectMore.ID;
-  const allLayers = getAllLayers(app.activeDocument.layers);
 
-  const requests = allLayers.map(l => ({
-    _obj: "get",
-    _target: [{ _ref: "layer", _id: l.id }]
-  }));
-
-  const allInfos = await batchPlay(requests, { synchronousExecution: true });
-
-  const instances = [];
-
-  allInfos.forEach((info, index) => {
-    if (info.smartObjectMore?.ID === targetSOid) {
-      instances.push(allLayers[index]);
-    }
-  });
+  const instances = allLayers.filter((l, i) => allInfos[i].smartObjectMore?.ID === targetSOid);
 
   console.log(`Found ${instances.length} instance(s) of "${layer.name}"`);
-
   return instances;
 }
-
-// export async function findSmartObjectInstances(targetLayerId) {
-//   // Get all layers
-//   const allLayersInfo = await batchPlay([
-//     {
-//       _obj: "get",
-//       _target: [{ _ref: "document", _enum: "ordinal", _value: "targetEnum" }]
-//     }
-//   ], { synchronousExecution: true });
-
-//   // Then iterate through layers and compare smartObject.documentID or smartObjectMore.placed
-//   // Count how many have the same ID
-// }
 
 
 export function getParentFolder(layer) {
