@@ -147,15 +147,15 @@ export const App = () => {
           </div>
           <TranslateAllButton appState={appState} />
           <div className="card">
-            <button onClick={async () => {
+            {/* <button onClick={async () => {
             // const activeLayer = app.activeDocument.activeLayers[0];
             const info = await pl.translateSelectedLayer(appState);
             }}>Translate Selected
-          </button>
+          </button> */}
           {/* <button onClick={increment}>Count is {count}</button> */}
-          <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
+          {/* <button onClick={() => updateSuggestion(1, "Updated Suggestion!")}>
               Update First Suggestion
-          </button>
+          </button> */}
           <div className="translate-selected-container">
             <GenerateSuggestionsButton onClick={handleGenerate} disabled={isProcessing || !selectedLanguage} />
             <div className="phrase-reference-container">
@@ -169,9 +169,9 @@ export const App = () => {
               />
               {/* <PhraseReference/> */}
             </div>
-            <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button>
+            {/* <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button> */}
           </div>
-          <button onClick={findLayersPosition}>Complex Alert</button>
+          {/* <button onClick={findLayersPosition}>Complex Alert</button> */}
 
           </div>
         </main>
