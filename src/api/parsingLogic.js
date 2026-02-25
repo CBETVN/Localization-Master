@@ -136,11 +136,11 @@ export async function translateAll(appState) {
     return;
   }
   if (!appState.languageData?.["EN"]) {
-    app.showAlert("No English language data loaded.");
+    app.showAlert("No data loaded.");
     return;
   }
 
-  const allLayers = ps.getAllLayers(app.activeDocument.layers);
+  const allLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
   const layerIndexMap = new Map(allLayers.map((l, i) => [l.id, i]));
 
   // Single batchPlay fetch for all layers

@@ -80,7 +80,13 @@ export async function translateSmartObject(smartObject, translation) {
           }], { synchronousExecution: true });
         }
       }
+      for (const layer of allLayers) {
+        if (layer.kind === "text") {
+          await cropCanvasToLayerBounds(layer);
+          break; // Only crop to the first text layer found, adjust as needed
 
+        }
+      }
       await app.activeDocument.save();
       app.activeDocument.closeWithoutSaving();
 
@@ -223,6 +229,22 @@ export function getAllLayers(layers) {
 
 
 
+export function getAllVisibleLayers(layers, result = []) {
+  for (const layer of layers) {
+    if (!layer.visible) continue; // skip invisible layer AND its entire subtree
+    result.push(layer);
+    if (layer.layers?.length) getAllVisibleLayers(layer.layers, result);
+  }
+  console.log(`Found ${result.length} visible layers in total.`);
+  return result;
+}
+
+
+
+
+
+
+
 /**
  * Returns all layers that share the same Smart Object ID as the given layer.
  * Operates entirely in memory using pre-fetched layer data — no Photoshop API calls.
@@ -280,4 +302,40 @@ export function isLayerAGroup(layer) {
   return false;
 }
 
+
+
+
+// Function to crop the canvas to the bounds of a given layer. Intended to be used in functions that already run in a modal, since batchPlay is used with synchronousExecution: true and that can cause issues if not handled properly.
+export async function cropCanvasToLayerBounds(layer) {
+  const { left, top, right, bottom } = layer.bounds;
+
+  await batchPlay([
+    {
+      _obj: "set",
+      _target: [{ _ref: "channel", _property: "selection" }],
+      to: {
+        _ref: [
+          { _ref: "channel", _enum: "channel", _value: "transparencyEnum" },
+          { _ref: "layer", _name: layer.name }
+        ]
+      }
+    },
+    {
+      _obj: "crop",
+      to: {
+        _obj: "rectangle",
+        top:    { _unit: "pixelsUnit", _value: top },
+        left:   { _unit: "pixelsUnit", _value: left },
+        bottom: { _unit: "pixelsUnit", _value: bottom },
+        right:  { _unit: "pixelsUnit", _value: right }
+      },
+      angle: { _unit: "angleUnit", _value: 0 },
+      delete: true,
+      AutoFillMethod: 1,
+      cropFillMode: { _enum: "cropFillMode", _value: "defaultFill" },
+      cropAspectRatioModeKey: { _enum: "cropAspectRatioModeClass", _value: "pureAspectRatio" },
+      constrainProportions: false
+    }
+  ], { synchronousExecution: true });
+}
 
