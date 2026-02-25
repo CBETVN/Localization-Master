@@ -140,12 +140,12 @@ export async function translateAll(appState) {
     return;
   }
 
-  const allLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
-  const layerIndexMap = new Map(allLayers.map((l, i) => [l.id, i]));
+  const allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
+  const layerIndexMap = new Map(allVisibleLayers.map((l, i) => [l.id, i]));
 
   // Single batchPlay fetch for all layers
   const allInfos = await batchPlay(
-    allLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+    allVisibleLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
     { synchronousExecution: true }
   );
 
@@ -153,7 +153,7 @@ export async function translateAll(appState) {
   let processedLayers = 0;
   let uniqueSOsFound = 0;
 
-  for (const layer of allLayers) {
+  for (const layer of allVisibleLayers) {
     if (!layer.visible || smartObjectInstances.has(layer.id)) continue;
 
     if (ps.isLayerAGroup(layer)) {
@@ -167,7 +167,7 @@ export async function translateAll(appState) {
 
     if (layer.kind !== constants.LayerKind.SMARTOBJECT) continue;
 
-    const layerInstances = ps.getSmartObjectInstances(layer, allLayers, allInfos, layerIndexMap);
+    const layerInstances = ps.getSmartObjectInstances(layer, allVisibleLayers, allInfos, layerIndexMap);
     if (!layerInstances) continue;
     processedLayers++;
     uniqueSOsFound++;
@@ -176,8 +176,8 @@ export async function translateAll(appState) {
       console.log(instance.name);
     });
   }
-
-  console.log(`Total layers: ${allLayers.length}`);
+  console.log(`Total instances found: ${smartObjectInstances.size}, total processed layers: ${processedLayers}`);
+  console.log(`Total layers: ${allVisibleLayers.length}`);
   console.log(`Processed ${processedLayers} layers, found ${uniqueSOsFound} unique SOs with ${smartObjectInstances.size} total instances.`);
   console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
 }
@@ -191,7 +191,9 @@ export async function processMatchedFolder(folderLayer, appState) {
     if (!rawTranslation) return;
 
     const chunks = parseRawPhrase(rawTranslation, "linesArray");
-    const children = [...folderLayer.layers].reverse();
+    // Reverse is not needed here
+    // const children = [...folderLayer.layers].reverse();
+    const children = [...folderLayer.layers];
     const count = Math.min(chunks.length, children.length);
 
     for (let i = 0; i < count; i++) {

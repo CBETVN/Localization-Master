@@ -27,18 +27,17 @@ export const getProjectInfo = async () => {
 
 
 
-// Translate the currently selected layer using the suggestion logic
 export async function translateSmartObject(smartObject, translation) {
-  const smartObjectId = smartObject.id; // extract primitive BEFORE modal
+  const smartObjectId = smartObject.id;
 
   try {
     await executeAsModal(async () => {
       await batchPlay([{
-          _obj: "select",
-          _target: [{ _ref: "layer", _id: smartObjectId }],
-          _options: { dialogOptions: "silent" }
+        _obj: "select",
+        _target: [{ _ref: "layer", _id: smartObjectId }],
+        _options: { dialogOptions: "silent" }
       }], { synchronousExecution: true });
-      // Re-fetch fresh layer reference INSIDE the modal
+
       const allDocLayers = getAllLayers(app.activeDocument.layers);
       const freshSmartObject = allDocLayers.find(l => l.id === smartObjectId);
 
@@ -50,43 +49,41 @@ export async function translateSmartObject(smartObject, translation) {
       console.log("Entering edit mode for Smart Object:", freshSmartObject.name);
       await editSmartObject(freshSmartObject);
 
+      // Fetch all inner layers and their info in one shot AFTER opening the SO
       const allLayers = getAllLayers(app.activeDocument.layers);
+      const allInnerInfos = await batchPlay(
+        allLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+        { synchronousExecution: true }
+      );
 
-      for (const layer of allLayers) {
-        if (layer.kind === "text") {
-          const layerInfo = await batchPlay([{
-            _obj: "get",
-            _target: [{ _ref: "layer", _id: layer.id }]
-          }], { synchronousExecution: true });
+      // Translate all text layers, reusing allInnerInfos for font size
+      for (let i = 0; i < allLayers.length; i++) {
+        const layer = allLayers[i];
+        if (layer.kind !== "text") continue;
 
-          const originalSize = layerInfo[0].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
+        const originalSize = allInnerInfos[i].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
 
-          layer.textItem.contents = translation;
-          app.activeDocument.activeLayers = [layer];
+        layer.textItem.contents = translation;
+        app.activeDocument.activeLayers = [layer];
 
-          await batchPlay([{
-            _obj: "set",
-            _target: [
-              { _ref: "property", _property: "textStyle" },
-              { _ref: "textLayer", _enum: "ordinal", _value: "targetEnum" }
-            ],
-            to: {
-              _obj: "textStyle",
-              textOverrideFeatureName: 808465458,
-              typeStyleOperationType: 3,
-              size: { _unit: "pointsUnit", _value: originalSize }
-            },
-            _options: { dialogOptions: "dontDisplay" }
-          }], { synchronousExecution: true });
-        }
+        await batchPlay([{
+          _obj: "set",
+          _target: [
+            { _ref: "property", _property: "textStyle" },
+            { _ref: "textLayer", _enum: "ordinal", _value: "targetEnum" }
+          ],
+          to: {
+            _obj: "textStyle",
+            textOverrideFeatureName: 808465458,
+            typeStyleOperationType: 3,
+            size: { _unit: "pointsUnit", _value: originalSize }
+          },
+          _options: { dialogOptions: "dontDisplay" }
+        }], { synchronousExecution: true });
       }
-      for (const layer of allLayers) {
-        if (layer.kind === "text") {
-          await cropCanvasToLayerBounds(layer);
-          break; // Only crop to the first text layer found, adjust as needed
 
-        }
-      }
+      await cropCanvasToLayerBounds(allLayers, allInnerInfos);
+
       await app.activeDocument.save();
       app.activeDocument.closeWithoutSaving();
 
@@ -305,9 +302,35 @@ export function isLayerAGroup(layer) {
 
 
 
-// Function to crop the canvas to the bounds of a given layer. Intended to be used in functions that already run in a modal, since batchPlay is used with synchronousExecution: true and that can cause issues if not handled properly.
-export async function cropCanvasToLayerBounds(layer) {
-  const { left, top, right, bottom } = layer.bounds;
+/**
+ * Crops the canvas of the active document to the bounds of the most relevant layer.
+ * Prefers the first layer with at least one enabled effect (e.g. drop shadow, gradient, stroke).
+ * Falls back to the first text layer if no such layer is found.
+ * Designed to be called from within an existing executeAsModal context.
+ *
+ * @param {Layer[]} allLayers - Flat array of all layers inside the Smart Object.
+ * @param {Object[]} allInnerInfos - batchPlay info objects for each layer, same order as allLayers.
+ */
+export async function cropCanvasToLayerBounds(allLayers, allInnerInfos) {
+  function hasEnabledEffects(layerEffects) {
+    if (!layerEffects) return false;
+    return Object.values(layerEffects).some(val => {
+      if (Array.isArray(val)) return val.some(e => e.enabled);
+      if (typeof val === 'object' && val !== null) return val.enabled === true;
+      return false;
+    });
+  }
+
+  const cropTarget =
+    allLayers.find((l, i) => hasEnabledEffects(allInnerInfos[i]?.layerEffects)) ??
+    allLayers.find(l => l.kind === "text");
+
+  if (!cropTarget) {
+    console.warn("No suitable crop target found in:", app.activeDocument.name);
+    return;
+  }
+
+  const { left, top, right, bottom } = cropTarget.bounds;
 
   await batchPlay([
     {
@@ -316,7 +339,7 @@ export async function cropCanvasToLayerBounds(layer) {
       to: {
         _ref: [
           { _ref: "channel", _enum: "channel", _value: "transparencyEnum" },
-          { _ref: "layer", _name: layer.name }
+          { _ref: "layer", _name: cropTarget.name }
         ]
       }
     },
@@ -337,5 +360,6 @@ export async function cropCanvasToLayerBounds(layer) {
       constrainProportions: false
     }
   ], { synchronousExecution: true });
-}
 
+  console.log(`Cropped canvas to layer: "${cropTarget.name}"`);
+}
