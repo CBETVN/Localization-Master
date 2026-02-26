@@ -186,30 +186,93 @@ export async function translateAll(appState) {
 
 
 
+
+
+//OLD VERSION BEFORE CONFIDENCE-BASED MATCHING LOGIC — KEPT FOR REFERENCE WHILE NEW LOGIC IS BEING DEVELOPED
+// export async function processMatchedFolder(folderLayer, appState) {
+//     const rawTranslation = extractMatchingPhrase(folderLayer, appState);
+//     if (!rawTranslation) return;
+
+//     const chunks = parseRawPhrase(rawTranslation, "linesArray");
+//     // Reverse is not needed here
+//     // const children = [...folderLayer.layers].reverse();
+//     const children = [...folderLayer.layers];
+//     const count = Math.min(chunks.length, children.length);
+
+//     for (let i = 0; i < count; i++) {
+//         const layer = children[i];
+//         const chunk = chunks[i];
+
+//         if (!layer.visible) continue;
+
+//         if (layer.kind === constants.LayerKind.SMARTOBJECT) {
+//             await ps.translateSmartObject(layer, chunk);
+
+//         } else if (layer.kind === constants.LayerKind.TEXT) {
+//             console.log(`Text layer — not yet implemented: "${layer.name}", chunk: "${chunk}"`);
+//         }
+//     }
+// }
+
+
+
+
+
+
+
+
+
 export async function processMatchedFolder(folderLayer, appState) {
-    const rawTranslation = extractMatchingPhrase(folderLayer, appState);
-    if (!rawTranslation) return;
 
-    const chunks = parseRawPhrase(rawTranslation, "linesArray");
-    // Reverse is not needed here
-    // const children = [...folderLayer.layers].reverse();
-    const children = [...folderLayer.layers];
-    const count = Math.min(chunks.length, children.length);
+  // folderLayer.name IS the EN phrase — no need to look it up again
+  const enLines    = parseRawPhrase(folderLayer.name, "linesArray");
 
-    for (let i = 0; i < count; i++) {
-        const layer = children[i];
-        const chunk = chunks[i];
+  // Only need to look up the translation
+  const transPhrase = extractMatchingPhrase(folderLayer, appState);
+  if (!transPhrase) return;
 
-        if (!layer.visible) continue;
+  const transLines = parseRawPhrase(transPhrase, "linesArray");
 
-        if (layer.kind === constants.LayerKind.SMARTOBJECT) {
-            await ps.translateSmartObject(layer, chunk);
+  const childLayers = [...folderLayer.layers].map((layer, i) => ({
+    id:         layer.id,
+    name:       layer.name,
+    stackIndex: i,
+    layer,
+  }));
 
-        } else if (layer.kind === constants.LayerKind.TEXT) {
-            console.log(`Text layer — not yet implemented: "${layer.name}", chunk: "${chunk}"`);
-        }
+  const { skipped, reason, confidence, result } = matchLayersToLines(
+    childLayers,
+    enLines,
+    transLines
+  );
+
+  if (skipped) {
+    console.log(`Skipped "${folderLayer.name}" — ${reason} (confidence: ${confidence})`);
+    return;
+  }
+
+  for (const [layerId, assignment] of result) {
+    if (assignment === null) continue;
+
+    const { text, matchType } = assignment;
+    const child = childLayers.find(c => c.id === layerId);
+    if (!child || !child.layer.visible) continue;
+
+    if (child.layer.kind === constants.LayerKind.SMARTOBJECT) {
+      console.log(`[${matchType}] "${child.layer.name}" → "${text}"`);
+      await ps.translateSmartObject(child.layer, text);
+
+    } else if (child.layer.kind === constants.LayerKind.TEXT) {
+      console.log(`Text layer — not yet implemented: "${child.layer.name}" → "${text}"`);
     }
+  }
 }
+
+
+
+
+
+
 
 
 
