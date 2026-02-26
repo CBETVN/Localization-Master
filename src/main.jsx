@@ -11,6 +11,7 @@ import { TranslateAllButton } from "./components/TranslateAllButton";
 import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown";
 import { DataStatusIcon } from "./components/DataStatusIcon";
 import { GenerateSuggestionsButton } from "./components/GenerateSuggestionsButton";
+import { TranslateSelectedTextField } from "./components/TranslateSelectedTextField";
 import * as pl from "./api/parsingLogic";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
@@ -166,6 +167,11 @@ export const App = () => {
                 onSelect={setSelectedId}
                 onGenerate={handleGenerate}
                 isProcessing={isProcessing}
+              />
+              <TranslateSelectedTextField
+                value={suggestions.find(s => s.id === selectedId)?.text || ""}
+                placeholder="Select a suggestion to translate..."
+                // onChange={(newText) => updateSuggestion(selectedId, newText)}
               />
               {/* <PhraseReference/> */}
             </div>
