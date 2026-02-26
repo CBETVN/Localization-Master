@@ -285,6 +285,124 @@ export async function generateSuggestions(layer, appState) {
 
 
 
+
+
+/**
+ * Matches child layers (Smart Objects or Text layers) to translated lines
+ * using name-first, tail-anchored logic.
+ *
+ * @param {Array} childLayers  - [{ id, name, stackIndex }]
+ * @param {Array} enLines      - ["TOTAL", "CREDITS", "WON"]
+ * @param {Array} transLines   - ["GESAMTGUTHABEN", "GEWONNEN"]
+ * @returns {Object}           - { skipped, reason, confidence, result }
+ *                               result is Map<layerId, { text, matchType, enIndex } | null>
+ *                               null means untouched
+ */
+function matchLayersToLines(childLayers, enLines, transLines) {
+  const result = new Map();
+
+  // Build normalized EN word → index lookup
+  // e.g. "TOTAL" → 0, "CREDITS" → 1, "WON" → 2
+  const enIndexByName = new Map(
+    enLines.map((word, i) => [word.trim().toUpperCase(), i])
+  );
+
+  // Resolve each layer to an EN index using confidence ladder:
+  //   1. Exact name match   → layer name matches EN word exactly
+  //   2. Fuzzy name match   → layer name starts with EN word ("CREDITS copy 2")
+  //   3. Stack index        → last resort, risky if layers were reordered
+  const resolved = childLayers.map((layer) => {
+    const normalizedName = layer.name.trim().toUpperCase();
+
+    // 1. Exact match
+    if (enIndexByName.has(normalizedName)) {
+      return { layer, enIndex: enIndexByName.get(normalizedName), matchType: "name" };
+    }
+
+    // 2. Fuzzy — layer name starts with an EN word ("CREDITS copy 2" → "CREDITS")
+    const fuzzyIndex = enLines.findIndex((word) =>
+      normalizedName.startsWith(word.trim().toUpperCase())
+    );
+    if (fuzzyIndex !== -1) {
+      return { layer, enIndex: fuzzyIndex, matchType: "fuzzy" };
+    }
+
+    // 3. Stack index — last resort
+    return { layer, enIndex: layer.stackIndex, matchType: "stackIndex" };
+  });
+
+  // Sort by EN index so assignment is always top-down
+  // regardless of how the artist ordered the layers in the panel
+  resolved.sort((a, b) => a.enIndex - b.enIndex);
+
+  // Confidence guard — skip folder if too many layers are unrecognizable
+  // confidence 1.0 = all matched by name/fuzzy
+  // confidence 0.0 = all fell through to stackIndex → skip
+  const stackIndexCount = resolved.filter((r) => r.matchType === "stackIndex").length;
+  const confidence = 1 - stackIndexCount / resolved.length;
+
+  if (confidence < 0.5) {
+    return {
+      skipped: true,
+      reason: confidence === 0 ? "no_name_matches" : "low_confidence",
+      confidence,
+      result: null,
+    };
+  }
+
+  // offset = how many EN lines collapsed into fewer translated lines
+  // e.g. EN has 3 lines, DE has 2 → offset = 1 (one word was merged)
+  const offset = resolved.length - transLines.length;
+
+  resolved.forEach(({ layer, matchType, enIndex }, i) => {
+
+    // Case A — trans has more lines than layers
+    // Translator split a word into more lines than there are layers.
+    // Absorb overflow into the last layer by joining remaining lines with a space.
+    // e.g. EN: ["YOU", "WIN"] / BG: ["ти", "вече", "спечели"]
+    //   YOU → "ти"
+    //   WIN → "вече спечели"
+    if (resolved.length <= transLines.length) {
+      const isLast = i === resolved.length - 1;
+      const text = isLast ? transLines.slice(i).join(" ") : transLines[i];
+      result.set(layer.id, { text, matchType, enIndex });
+      return;
+    }
+
+    // Case B — EN has more lines than trans, true tail-anchoring
+    // First maps to first, last maps to last, middle gap is untouched.
+    // e.g. EN: ["TOTAL", "CREDITS", "WON"] / DE: ["GESAMTGUTHABEN", "GEWONNEN"]
+    //   TOTAL   → "GESAMTGUTHABEN"
+    //   CREDITS → null (middle gap, untouched)
+    //   WON     → "GEWONNEN"
+    if (i === 0) {
+      result.set(layer.id, { text: transLines[0], matchType, enIndex });
+    } else if (i <= offset) {
+      result.set(layer.id, null); // middle gap, untouched
+    } else {
+      result.set(layer.id, { text: transLines[i - offset], matchType, enIndex });
+    }
+  });
+
+  return { skipped: false, confidence, result };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * Parses a raw phrase string into different representations based on the requested mode.
  * Strips (…) annotations in all modes.
