@@ -4,15 +4,9 @@ import { translateAll } from "../api/parsingLogic";
 
 export const TranslateAllButton = ({
   appState,
-  onClick,
   label = "Translate All",
 }) => {
-  const handleClick = () => {
-    if (onClick) {
-      onClick();
-    }
-    translateAll(appState);
-  };
+  const handleClick = () => {translateAll(appState);};
   return (
     <sp-action-button onClick={handleClick}>
       {label}

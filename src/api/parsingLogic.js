@@ -8,7 +8,7 @@ import * as ps from "./photoshop.js"; // Import all Photoshop API functions as p
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
 const XLSX = window.XLSX;
-const { app, constants } = photoshop;
+const { core, app, constants } = photoshop;
 const { executeAsModal } = photoshop.core;
 const { batchPlay } = photoshop.action;
 
@@ -313,6 +313,38 @@ export function translateByFolder(appState, allLayers) {
 
 
 
+
+export async function translateSelected(appState) {
+  const selLayers = app.activeDocument.activeLayers;
+  
+  if (selLayers.length !== 1) {
+    app.showAlert(selLayers.length === 0 ? "Please select a layer to translate." : "Please select only one layer to translate.");
+    return;
+  }
+
+  const layer = selLayers[0];
+  const isValidKind = layer.kind === constants.LayerKind.SMARTOBJECT || layer.kind === constants.LayerKind.TEXT;
+  
+  if (!isValidKind) {
+    app.showAlert("Please select a smart object or text layer to translate.");
+    return;
+  }
+
+  const confirmed = confirm(`Translate layer "${layer.name}"?`);
+  console.log("confirm result:", confirmed);
+  console.log("Translating selected layer: ", appState.suggestionTextfieldValue);
+
+  if (!confirmed) return;
+
+}
+
+
+
+
+
+
+
+
 export async function translateSelectedLayer(appState) {
   console.log("Translating selected layer...");
   const activeLayer = app.activeDocument.activeLayers[0];
@@ -320,10 +352,10 @@ export async function translateSelectedLayer(appState) {
 
   const suggestion = extractMatchingPhrase(activeLayer, appState);
   if (suggestion) {
-    console.log("Suggestion found:", suggestion);
+    // console.log("Suggestion found:", suggestion);
     await ps.translateSmartObject(activeLayer, suggestion);
   } else {
-    console.log("No matching phrase found for selected layer.");
+    // console.log("No matching phrase found for selected layer.");
   }
 }
 

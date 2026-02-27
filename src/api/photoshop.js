@@ -59,7 +59,7 @@ export async function translateSmartObject(smartObject, translation) {
       // Translate all text layers, reusing allInnerInfos for font size
       for (let i = 0; i < allLayers.length; i++) {
         const layer = allLayers[i];
-        if (layer.kind !== "text") continue;
+        if (layer.kind !== "text" || !layer.visible) continue;
 
         const originalSize = allInnerInfos[i].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
 
@@ -312,27 +312,44 @@ export function isLayerAGroup(layer) {
  * @param {Object[]} allInnerInfos - batchPlay info objects for each layer, same order as allLayers.
  */
 export async function cropCanvasToLayerBounds(allLayers, allInnerInfos) {
+
+  // --- HELPER ---
+  // Checks if a layer has at least one enabled effect (drop shadow, stroke, gradient, etc.)
+  // layerEffects is an object where values can be arrays of effects or single effect objects
   function hasEnabledEffects(layerEffects) {
     if (!layerEffects) return false;
     return Object.values(layerEffects).some(val => {
-      if (Array.isArray(val)) return val.some(e => e.enabled);
-      if (typeof val === 'object' && val !== null) return val.enabled === true;
+      if (Array.isArray(val)) return val.some(e => e.enabled);             // e.g. multiple drop shadows
+      if (typeof val === 'object' && val !== null) return val.enabled === true; // e.g. single stroke
       return false;
     });
   }
 
-  const cropTarget =
-    allLayers.find((l, i) => hasEnabledEffects(allInnerInfos[i]?.layerEffects)) ??
-    allLayers.find(l => l.kind === "text");
+  // --- PICK CROP TARGET ---
+  // First choice: a layer that has at least one enabled effect (more precise bounds due to effects)
+  // Fallback: the first text layer if no layer with effects is found
+  // ?? is the nullish coalescing operator — if the first find() returns undefined, try the second
+const cropTarget =
+    allLayers.find((l, i) => l.visible && hasEnabledEffects(allInnerInfos[i]?.layerEffects)) ??
+    allLayers.find(l => l.visible && l.kind === "text");
 
+  // --- GUARD ---
+  // If neither a layer with effects nor a text layer was found, bail out gracefully
   if (!cropTarget) {
     console.warn("No suitable crop target found in:", app.activeDocument.name);
     return;
   }
 
+  // --- GET BOUNDS ---
+  // Destructure the pixel bounds of the chosen layer
   const { left, top, right, bottom } = cropTarget.bounds;
 
+  // --- BATCHPLAY: TWO OPERATIONS IN ONE CALL ---
   await batchPlay([
+
+    // OPERATION 1: Select the transparency of the crop target layer
+    // This creates a selection based on the layer's transparent pixels
+    // (not strictly needed for the crop but sets context)
     {
       _obj: "set",
       _target: [{ _ref: "channel", _property: "selection" }],
@@ -343,6 +360,13 @@ export async function cropCanvasToLayerBounds(allLayers, allInnerInfos) {
         ]
       }
     },
+
+    // OPERATION 2: Crop the canvas to the exact pixel bounds of the crop target layer
+    // top/left/bottom/right come from cropTarget.bounds above
+    // angle: 0 — no rotation
+    // delete: true — deletes pixels outside the crop area
+    // AutoFillMethod, cropFillMode, cropAspectRatioModeKey, constrainProportions
+    //   — these are standard Photoshop crop options, kept at defaults
     {
       _obj: "crop",
       to: {
@@ -359,6 +383,7 @@ export async function cropCanvasToLayerBounds(allLayers, allInnerInfos) {
       cropAspectRatioModeKey: { _enum: "cropAspectRatioModeClass", _value: "pureAspectRatio" },
       constrainProportions: false
     }
+
   ], { synchronousExecution: true });
 
   console.log(`Cropped canvas to layer: "${cropTarget.name}"`);

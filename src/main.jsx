@@ -12,6 +12,7 @@ import { LanguageSelectorDropdown } from "./components/LanguageSelectorDropdown"
 import { DataStatusIcon } from "./components/DataStatusIcon";
 import { GenerateSuggestionsButton } from "./components/GenerateSuggestionsButton";
 import { TranslateSelectedTextField } from "./components/TranslateSelectedTextField";
+import { TranslateSelectedButton } from "./components/TranslateSelectedButton";
 import * as pl from "./api/parsingLogic";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
@@ -20,12 +21,15 @@ const { app, core, action } = photoshop;
 export const App = () => {
   const webviewUI = import.meta.env.VITE_BOLT_WEBVIEW_UI === "true";
   
-  // const [count, setCount] = useState(0);
-  // const increment = () => setCount((currentValue) => currentValue + 1);
+
   const [languageData, setLanguageData] = useState({});
   const [availableLanguages, setAvailableLanguages] = useState([]);
   const [selectedLanguage, setSelectedLanguage] = useState("");
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+  const [selectedId, setSelectedId] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Bundle all relevant state into a single object to pass to logic/helpers or child components
   const appState = {
@@ -33,13 +37,9 @@ export const App = () => {
   availableLanguages,
   selectedLanguage,
   isDataLoaded,
+  suggestionTextfieldValue: suggestions.find(s => s.id === selectedId)?.text || "",
   // ...add more as needed
   };
-
-
-  const [selectedId, setSelectedId] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [isProcessing, setIsProcessing] = useState(false);
 
 
   const handleFileLoaded = (parsedData) => {
@@ -171,8 +171,9 @@ export const App = () => {
               <TranslateSelectedTextField
                 value={suggestions.find(s => s.id === selectedId)?.text || ""}
                 placeholder="Select a suggestion to translate..."
-                // onChange={(newText) => updateSuggestion(selectedId, newText)}
+                onChange={(newText) => updateSuggestion(selectedId, newText)}
               />
+              <TranslateSelectedButton appState={appState} label="Translate Selected" />
               {/* <PhraseReference/> */}
             </div>
             {/* <button onClick={() => api.getParentFolder(app.activeDocument.activeLayers[0])}>parent folder?</button> */}
