@@ -110,18 +110,24 @@ export async function translateAll(appState) {
     { synchronousExecution: true }
   );
 
-  const smartObjectInstances = new Set();
-  let processedLayers = 0;
-  let uniqueSOsFound = 0;
+  // Tracks internal SO document IDs (smartObjectMore.ID), not layer instance IDs.
+  // Shared with processMatchedFolder so both branches see the same picture
+  // regardless of which one encounters a given SO first.
+  const translatedSOIds = new Set();
 
   for (const layer of allVisibleLayers) {
-    if (!layer.visible || smartObjectInstances.has(layer.id)) continue;
+    if (!layer.visible) continue;
+
+    // Guard: skip if this SO's internal document was already translated.
+    // Uses smartObjectMore.ID so all instances of the same SO are blocked by one entry.
+    const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
+    if (layerSOId && translatedSOIds.has(layerSOId)) continue;
 
     if (ps.isLayerAGroup(layer)) {
       if (isNameENPhrase(layer.name, appState)) {
-        processedLayers++;
         console.log(`Layer: ${layer.name} is a matching folder`);
-        await processMatchedFolder(layer, appState);
+        // Pass translatedSOIds so processMatchedFolder can check and populate it
+        await processMatchedFolder(layer, appState, translatedSOIds);
       }
       continue;
     }
@@ -130,16 +136,10 @@ export async function translateAll(appState) {
 
     const layerInstances = ps.getSmartObjectInstances(layer, allVisibleLayers, allInfos, layerIndexMap);
     if (!layerInstances) continue;
-    processedLayers++;
-    uniqueSOsFound++;
-    layerInstances.forEach(instance => {
-      smartObjectInstances.add(instance.id);
-      console.log(instance.name);
-    });
+
+    // Mark the internal SO document ID so all instances are blocked from here on
+    if (layerSOId) translatedSOIds.add(layerSOId);
   }
-  console.log(`Total instances found: ${smartObjectInstances.size}, total processed layers: ${processedLayers}`);
-  console.log(`Total layers: ${allVisibleLayers.length}`);
-  console.log(`Processed ${processedLayers} layers, found ${uniqueSOsFound} unique SOs with ${smartObjectInstances.size} total instances.`);
   console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
 }
 
@@ -151,7 +151,7 @@ export async function translateAll(appState) {
 
 
 
-export async function processMatchedFolder(folderLayer, appState) {
+export async function processMatchedFolder(folderLayer, appState, translatedSOIds = new Set()) {
 
   // folderLayer.name IS the EN phrase — no need to look it up again
   const enLines    = parseRawPhrase(folderLayer.name, "linesArray");
@@ -161,6 +161,19 @@ export async function processMatchedFolder(folderLayer, appState) {
   if (!transPhrase) return;
 
   const transLines = parseRawPhrase(transPhrase, "linesArray");
+
+  // Fetch batchPlay info for all child SO layers in one call to get their smartObjectMore.ID
+  const childSOLayers = [...folderLayer.layers].filter(l => l.kind === constants.LayerKind.SMARTOBJECT);
+  const childSOInfos = await batchPlay(
+    childSOLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+    { synchronousExecution: true }
+  );
+  // Map layer.id → internal SO document ID for O(1) lookup in the loop
+  const soIdMap = new Map();
+  childSOLayers.forEach((l, i) => {
+    const internalId = childSOInfos[i]?.smartObjectMore?.ID;
+    if (internalId) soIdMap.set(l.id, internalId);
+  });
 
   const childLayers = [...folderLayer.layers].map((layer, i) => ({
     id:         layer.id,
@@ -188,8 +201,19 @@ export async function processMatchedFolder(folderLayer, appState) {
     if (!child || !child.layer.visible) continue;
 
     if (child.layer.kind === constants.LayerKind.SMARTOBJECT) {
+      const internalSOId = soIdMap.get(child.id);
+
+      // Skip if this SO's internal document was already translated by another instance
+      if (internalSOId && translatedSOIds.has(internalSOId)) {
+        console.log(`[SKIP] "${child.layer.name}" already translated (shared SO instance).`);
+        continue;
+      }
+
       console.log(`[${matchType}] "${child.layer.name}" → "${text}"`);
       await ps.translateSmartObject(child.layer, text);
+
+      // Mark this internal SO document as done
+      if (internalSOId) translatedSOIds.add(internalSOId);
 
     } else if (child.layer.kind === constants.LayerKind.TEXT) {
       console.log(`Text layer — not yet implemented: "${child.layer.name}" → "${text}"`);
@@ -474,19 +498,19 @@ export function parsePhraseForSuggestions(phrase) {
 
 
 
-// Checks if a layer name matches any line in the EN phrases array from appState.languageData
+// Checks if a layer name matches any EN phrase in the translation table
 export function isNameENPhrase(layerName, appState) {
   const engKey = appState.languageData && appState.languageData["EN"];
   if (!engKey || !Array.isArray(engKey)) return false;
+
   for (const entry of engKey) {
-    const lines = entry.split('\n').map(line => line.trim());
-      // Split, trim, and filter out lines with (), [], or {}
-      const validLines = entry
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !/[\[\](){}]/.test(line));
-      const joined = validLines.join(' ');
-      if (joined === layerName) {
+    // CHANGED: was manually splitting lines and dropping entire lines containing ()[]{}  
+    // which lost meaningful words like "SUPER" and "OF" from annotated lines.
+    // Now uses parseRawPhrase("oneLiner") which strips annotation CONTENT from within lines
+    // but preserves surrounding words — consistent with how extractMatchingPhrase works.
+    const normalized = parseRawPhrase(entry, "oneLiner");
+
+    if (normalized.toUpperCase() === layerName.toUpperCase()) {
       return true;
     }
   }
