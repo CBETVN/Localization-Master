@@ -41,46 +41,7 @@ export async function parseExcelFile(fileOrArrayBuffer) {
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} - { languageData, availableLanguages }
  */
-// function extractLanguageData(workbook) {
-//   // Get the first worksheet
-//   const sheetName = workbook.SheetNames[0];
-//   const worksheet = workbook.Sheets[sheetName];
-  
-//   // Convert to array of arrays (first row becomes headers)
-//   const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-  
-//   const languageData = {};
-//   const availableLanguages = [];
-  
-//   if (jsonData.length > 0) {
-//     // First row contains language keys (ENG, BG, DE, etc.)
-//     const languages = jsonData[0];
-    
-//     // Columns to ignore (not language data) - case insensitive
-//     const ignoredColumns = ["screen preview"];
-    
-//     // Store available languages (filter out empty cells and ignored columns)
-//     languages.forEach(lang => {
-//       if (lang && lang.trim() && !ignoredColumns.includes(lang.trim().toLowerCase())) {
-//         availableLanguages.push(lang);
-//         languageData[lang] = [];
-//       }
-//     });
-    
-//     // Process remaining rows (translation data for each language)
-//     for (let i = 1; i < jsonData.length; i++) {
-//       const row = jsonData[i];
-//       row.forEach((cell, columnIndex) => {
-//         const language = languages[columnIndex];
-//         if (language && cell && typeof cell === 'string' && !ignoredColumns.includes(language.trim().toLowerCase())) {
-//           languageData[language].push(cell);
-//         }
-//       });
-//     }
-//   }
-  
-//   return { languageData, availableLanguages };
-// }
+
 
 function extractLanguageData(workbook) {
   const sheetName = workbook.SheetNames[0];
@@ -188,38 +149,6 @@ export async function translateAll(appState) {
 
 
 
-//OLD VERSION BEFORE CONFIDENCE-BASED MATCHING LOGIC — KEPT FOR REFERENCE WHILE NEW LOGIC IS BEING DEVELOPED
-// export async function processMatchedFolder(folderLayer, appState) {
-//     const rawTranslation = extractMatchingPhrase(folderLayer, appState);
-//     if (!rawTranslation) return;
-
-//     const chunks = parseRawPhrase(rawTranslation, "linesArray");
-//     // Reverse is not needed here
-//     // const children = [...folderLayer.layers].reverse();
-//     const children = [...folderLayer.layers];
-//     const count = Math.min(chunks.length, children.length);
-
-//     for (let i = 0; i < count; i++) {
-//         const layer = children[i];
-//         const chunk = chunks[i];
-
-//         if (!layer.visible) continue;
-
-//         if (layer.kind === constants.LayerKind.SMARTOBJECT) {
-//             await ps.translateSmartObject(layer, chunk);
-
-//         } else if (layer.kind === constants.LayerKind.TEXT) {
-//             console.log(`Text layer — not yet implemented: "${layer.name}", chunk: "${chunk}"`);
-//         }
-//     }
-// }
-
-
-
-
-
-
-
 
 
 export async function processMatchedFolder(folderLayer, appState) {
@@ -271,51 +200,19 @@ export async function processMatchedFolder(folderLayer, appState) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-// Serch for parent folder and translate
-export function translateByFolder(appState, allLayers) {
-  
-    for (const layer of allLayers) {
-      // Only process visible group layers
-      if (ps.isLayerAGroup(layer) && layer.visible === true) {
-        if (isNameENPhrase(layer.name, appState)) {
-          console.log(`Layer: ${layer.name} is in EN list and will be translated`);
-          // Example action: hide the layer (replace with translation logic)
-          // layer.visible = false;
-          let childrenLayers = layer.layers;
-          for (const child of childrenLayers) {
-            console.log(`Child layer: ${child.name} of parent ${layer.name}`);
-            if (child.kind === "textLayer" && child.visible === true) {
-              console.log(`--> Text layer found: ${child.name}`);
-            } else if (child.kind === "smartObject" && child.visible === true) {
-              console.log(`--> SmartObject layer found: ${child.name}`);
-            }
-          }
-        }
-      }
-    }
-
-
+function isTextfieldValueValid(value) {
+  return value?.trim().length > 0;
 }
 
 
 
 
 
-
 export async function translateSelected(appState) {
+  console.log("translateSelected called", appState);
   const selLayers = app.activeDocument.activeLayers;
+  console.log("selLayers:", selLayers.length, selLayers[0]?.kind);
+
   
   if (selLayers.length !== 1) {
     app.showAlert(selLayers.length === 0 ? "Please select a layer to translate." : "Please select only one layer to translate.");
@@ -324,40 +221,41 @@ export async function translateSelected(appState) {
 
   const layer = selLayers[0];
   const isValidKind = layer.kind === constants.LayerKind.SMARTOBJECT || layer.kind === constants.LayerKind.TEXT;
-  
+
   if (!isValidKind) {
     app.showAlert("Please select a smart object or text layer to translate.");
     return;
   }
 
-  const confirmed = confirm(`Translate layer "${layer.name}"?`);
-  console.log("confirm result:", confirmed);
-  console.log("Translating selected layer: ", appState.suggestionTextfieldValue);
 
-  if (!confirmed) return;
-
-}
-
-
-
-
-
-
-
-
-export async function translateSelectedLayer(appState) {
-  console.log("Translating selected layer...");
-  const activeLayer = app.activeDocument.activeLayers[0];
-  if (!activeLayer) return;
-
-  const suggestion = extractMatchingPhrase(activeLayer, appState);
-  if (suggestion) {
-    // console.log("Suggestion found:", suggestion);
-    await ps.translateSmartObject(activeLayer, suggestion);
-  } else {
-    // console.log("No matching phrase found for selected layer.");
+  if (!isTextfieldValueValid(appState.suggestionTextfieldValue)) {
+    app.showAlert("Please enter a translation first.");
+    return;
   }
+
+  // const confirmed = confirm(`Translate layer "${layer.name}"?`);
+  // if (!confirmed) return;
+
+  const translation = appState.suggestionTextfieldValue.trim();
+
+  if (layer.kind === constants.LayerKind.TEXT) {
+    await ps.translateTextLayer(layer, translation);
+  } else if (layer.kind === constants.LayerKind.SMARTOBJECT) {
+    await ps.translateSmartObject(layer, translation);
+  }
+
+  console.log(`Translated "${layer.name}" → "${translation}"`);
+  // const confirmed = confirm(`Translate layer "${layer.name}"?`);
+  // console.log("confirm result:", confirmed);
+  // console.log("Translating selected layer: ", appState.suggestionTextfieldValue);
+
+  // if (!confirmed) return;
 }
+
+
+
+
+
 
 
 export async function generateSuggestions(layer, appState) {
@@ -576,15 +474,6 @@ export function parsePhraseForSuggestions(phrase) {
 
 
 
-//parse a phrase into lines and ignore lines with () or [] (like [NUMBER])
-export function parseForTranslation(text) {
-  return text
-    .split('\n') // Split into lines
-    .map(line => line.trim()) // Remove extra spaces
-    .filter(line => line && !line.includes('(') && !line.includes('[')); // Ignore lines with () or []
-}
-
-
 // Checks if a layer name matches any line in the EN phrases array from appState.languageData
 export function isNameENPhrase(layerName, appState) {
   const engKey = appState.languageData && appState.languageData["EN"];
@@ -605,36 +494,8 @@ export function isNameENPhrase(layerName, appState) {
 }
 
 
-export function getChildrenLayers(layer) {
-    if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
-        return layer.layers;
-    }
-    return [];
-}
 
 
-
-
-
-
-// Compare layer.name to parsed EN lines, log and break on first match
-export function compareLayerNameToEN(layer, appState) {
-  const enEntries = appState.languageData && appState.languageData["EN"];
-  if (!enEntries || !Array.isArray(enEntries)) return false;
-  // Preprocess all EN lines to uppercase for case-insensitive comparison
-  const enLines = [];
-  for (const entry of enEntries) {
-    enLines.push(...parseForTranslation(entry).map(line => line.toUpperCase()));
-  }
-  const enLineSet = new Set(enLines);
-  // Compare layer.name uppercased
-  const layerNameUpper = layer.name.toUpperCase();
-  if (enLineSet.has(layerNameUpper)) {
-    console.log(`Layer name "${layer.name}" matches EN line.`);
-    return true;
-  }
-  return false;
-}
 
 
 
@@ -660,3 +521,142 @@ export function extractMatchingPhrase(layer, appState) {
 }
 
 
+
+
+
+//DEAD CODE
+
+
+
+
+// export function getChildrenLayers(layer) {
+//     if (layer.kind === "group" && layer.layers && layer.layers.length > 0) {
+//         return layer.layers;
+//     }
+//     return [];
+// }
+
+
+
+// // Serch for parent folder and translate
+// export function translateByFolder(appState, allLayers) {
+  
+//     for (const layer of allLayers) {
+//       // Only process visible group layers
+//       if (ps.isLayerAGroup(layer) && layer.visible === true) {
+//         if (isNameENPhrase(layer.name, appState)) {
+//           console.log(`Layer: ${layer.name} is in EN list and will be translated`);
+//           // Example action: hide the layer (replace with translation logic)
+//           // layer.visible = false;
+//           let childrenLayers = layer.layers;
+//           for (const child of childrenLayers) {
+//             console.log(`Child layer: ${child.name} of parent ${layer.name}`);
+//             if (child.kind === "textLayer" && child.visible === true) {
+//               console.log(`--> Text layer found: ${child.name}`);
+//             } else if (child.kind === "smartObject" && child.visible === true) {
+//               console.log(`--> SmartObject layer found: ${child.name}`);
+//             }
+//           }
+//         }
+//       }
+//     }
+
+
+// }
+
+
+
+
+
+
+
+// export async function translateSelectedLayer(appState) {
+//   console.log("Translating selected layer...");
+//   const activeLayer = app.activeDocument.activeLayers[0];
+//   if (!activeLayer) return;
+
+//   const suggestion = extractMatchingPhrase(activeLayer, appState);
+//   if (suggestion) {
+//     // console.log("Suggestion found:", suggestion);
+//     await ps.translateSmartObject(activeLayer, suggestion);
+//   } else {
+//     // console.log("No matching phrase found for selected layer.");
+//   }
+// }
+
+
+
+
+
+// Compare layer.name to parsed EN lines, log and break on first match
+// export function compareLayerNameToEN(layer, appState) {
+//   const enEntries = appState.languageData && appState.languageData["EN"];
+//   if (!enEntries || !Array.isArray(enEntries)) return false;
+//   // Preprocess all EN lines to uppercase for case-insensitive comparison
+//   const enLines = [];
+//   for (const entry of enEntries) {
+//     enLines.push(...parseForTranslation(entry).map(line => line.toUpperCase()));
+//   }
+//   const enLineSet = new Set(enLines);
+//   // Compare layer.name uppercased
+//   const layerNameUpper = layer.name.toUpperCase();
+//   if (enLineSet.has(layerNameUpper)) {
+//     console.log(`Layer name "${layer.name}" matches EN line.`);
+//     return true;
+//   }
+//   return false;
+// }
+
+
+
+
+// //parse a phrase into lines and ignore lines with () or [] (like [NUMBER])
+// export function parseForTranslation(text) {
+//   return text
+//     .split('\n') // Split into lines
+//     .map(line => line.trim()) // Remove extra spaces
+//     .filter(line => line && !line.includes('(') && !line.includes('[')); // Ignore lines with () or []
+// }
+
+
+
+// function extractLanguageData(workbook) {
+//   // Get the first worksheet
+//   const sheetName = workbook.SheetNames[0];
+//   const worksheet = workbook.Sheets[sheetName];
+  
+//   // Convert to array of arrays (first row becomes headers)
+//   const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  
+//   const languageData = {};
+//   const availableLanguages = [];
+  
+//   if (jsonData.length > 0) {
+//     // First row contains language keys (ENG, BG, DE, etc.)
+//     const languages = jsonData[0];
+    
+//     // Columns to ignore (not language data) - case insensitive
+//     const ignoredColumns = ["screen preview"];
+    
+//     // Store available languages (filter out empty cells and ignored columns)
+//     languages.forEach(lang => {
+//       if (lang && lang.trim() && !ignoredColumns.includes(lang.trim().toLowerCase())) {
+//         availableLanguages.push(lang);
+//         languageData[lang] = [];
+//       }
+//     });
+    
+//     // Process remaining rows (translation data for each language)
+//     for (let i = 1; i < jsonData.length; i++) {
+//       const row = jsonData[i];
+//       row.forEach((cell, columnIndex) => {
+//         const language = languages[columnIndex];
+//         if (language && cell && typeof cell === 'string' && !ignoredColumns.includes(language.trim().toLowerCase())) {
+//           languageData[language].push(cell);
+//         }
+//       });
+//     }
+//   }
+  
+//   return { languageData, availableLanguages };
+// }

@@ -96,6 +96,27 @@ export async function translateSmartObject(smartObject, translation) {
 
 
 
+export async function translateTextLayer(textLayer, translation) {
+  await executeAsModal(async () => {
+    textLayer.textItem.contents = translation;
+  }, { commandName: "Translate Text Layer" });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //Takes a layer as a parameter and enters edit mode. Doesnt preform a check so make sure layer is in fact SMart object.
 export async function editSmartObject(smartObject) {

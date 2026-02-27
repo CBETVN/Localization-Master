@@ -30,6 +30,7 @@ export const App = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [textfieldValue, setTextfieldValue] = useState("");
 
   // Bundle all relevant state into a single object to pass to logic/helpers or child components
   const appState = {
@@ -37,7 +38,7 @@ export const App = () => {
   availableLanguages,
   selectedLanguage,
   isDataLoaded,
-  suggestionTextfieldValue: suggestions.find(s => s.id === selectedId)?.text || "",
+  suggestionTextfieldValue: textfieldValue,
   // ...add more as needed
   };
 
@@ -164,14 +165,17 @@ export const App = () => {
                 maxHeight="200px"
                 suggestions={suggestions}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  setTextfieldValue(suggestions.find(s => s.id === id)?.text || "");
+                }}
                 onGenerate={handleGenerate}
                 isProcessing={isProcessing}
               />
               <TranslateSelectedTextField
-                value={suggestions.find(s => s.id === selectedId)?.text || ""}
+                value={textfieldValue}
                 placeholder="Select a suggestion to translate..."
-                onChange={(newText) => updateSuggestion(selectedId, newText)}
+                onChange={setTextfieldValue}
               />
               <TranslateSelectedButton appState={appState} label="Translate Selected" />
               {/* <PhraseReference/> */}
