@@ -531,8 +531,9 @@ export function extractMatchingPhrase(layer, appState) {
   if (!enEntries || !Array.isArray(enEntries) || !langEntries || !Array.isArray(langEntries)) return null;
 
   for (let i = 0; i < enEntries.length; i++) {
-    // Normalize EN phrase: replace all whitespace (tabs, newlines, etc.) with a single space, then uppercase
-    const normalizedEN = parseRawPhrase(enEntries[i], "strict");
+    // CHANGED: was "strict" which dropped entire lines containing [...], losing words like "OF"
+    // Now uses "oneLiner" — consistent with isNameENPhrase — so both functions normalize identically
+    const normalizedEN = parseRawPhrase(enEntries[i], "oneLiner");
     // console.log(`Comparing: "${layer.name.toUpperCase().trim()}" vs "${normalizedEN}"`);
 
     if (layer.name.toUpperCase() === normalizedEN.toUpperCase()) {

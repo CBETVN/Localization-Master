@@ -51,6 +51,11 @@ export async function translateSmartObject(smartObject, translation) {
 
       // Fetch all inner layers and their info in one shot AFTER opening the SO
       const allLayers = getAllLayers(app.activeDocument.layers);
+      const isThereTextLayer = allLayers.some(l => l.kind === "text");
+      if (!isThereTextLayer) {
+        app.activeDocument.closeWithoutSaving();
+        return;
+      }
       const allInnerInfos = await batchPlay(
         allLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
         { synchronousExecution: true }
