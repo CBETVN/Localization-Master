@@ -127,7 +127,7 @@ export async function translateAll(appState) {
       if (isNameENPhrase(layer.name, appState)) {
         console.log(`Layer: ${layer.name} is a matching folder`);
         // Pass translatedSOIds so processMatchedFolder can check and populate it
-        await processMatchedFolder(layer, appState, translatedSOIds);
+        await processMatchedFolder(layer, appState, translatedSOIds, allInfos, layerIndexMap);
       }
       continue;
     }
@@ -151,7 +151,7 @@ export async function translateAll(appState) {
 
 
 
-export async function processMatchedFolder(folderLayer, appState, translatedSOIds = new Set()) {
+export async function processMatchedFolder(folderLayer, appState, translatedSOIds = new Set(), allInfos = null, layerIndexMap = null) {
 
   // folderLayer.name IS the EN phrase — no need to look it up again
   const enLines    = parseRawPhrase(folderLayer.name, "linesArray");
@@ -162,18 +162,26 @@ export async function processMatchedFolder(folderLayer, appState, translatedSOId
 
   const transLines = parseRawPhrase(transPhrase, "linesArray");
 
-  // Fetch batchPlay info for all child SO layers in one call to get their smartObjectMore.ID
+  // Map layer.id → internal SO document ID for O(1) lookup in the loop.
+  // Uses pre-save allInfos passed from translateAll so IDs are stable across folders.
+  // Falls back to a fresh batchPlay fetch if called standalone (e.g. from generateSuggestions).
   const childSOLayers = [...folderLayer.layers].filter(l => l.kind === constants.LayerKind.SMARTOBJECT);
-  const childSOInfos = await batchPlay(
-    childSOLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
-    { synchronousExecution: true }
-  );
-  // Map layer.id → internal SO document ID for O(1) lookup in the loop
   const soIdMap = new Map();
-  childSOLayers.forEach((l, i) => {
-    const internalId = childSOInfos[i]?.smartObjectMore?.ID;
-    if (internalId) soIdMap.set(l.id, internalId);
-  });
+  if (allInfos && layerIndexMap) {
+    childSOLayers.forEach(l => {
+      const internalId = allInfos[layerIndexMap.get(l.id)]?.smartObjectMore?.ID;
+      if (internalId) soIdMap.set(l.id, internalId);
+    });
+  } else {
+    const childSOInfos = await batchPlay(
+      childSOLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+      { synchronousExecution: true }
+    );
+    childSOLayers.forEach((l, i) => {
+      const internalId = childSOInfos[i]?.smartObjectMore?.ID;
+      if (internalId) soIdMap.set(l.id, internalId);
+    });
+  }
   // console.log("soIdMap:", JSON.stringify([...soIdMap.entries()]));
 
   const childLayers = [...folderLayer.layers].map((layer, i) => ({
