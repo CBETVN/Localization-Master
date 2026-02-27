@@ -37,7 +37,7 @@ export async function translateSmartObject(smartObject, translation) {
         _target: [{ _ref: "layer", _id: smartObjectId }],
         _options: { dialogOptions: "silent" }
       }], { synchronousExecution: true });
-
+      console.log("Selected Smart Object layer:", smartObject.name, "(ID:", smartObjectId, ")");
       const allDocLayers = getAllLayers(app.activeDocument.layers);
       const freshSmartObject = allDocLayers.find(l => l.id === smartObjectId);
 
@@ -46,7 +46,7 @@ export async function translateSmartObject(smartObject, translation) {
         return;
       }
 
-      console.log("Entering edit mode for Smart Object:", freshSmartObject.name);
+      // console.log("Entering edit mode for Smart Object:", freshSmartObject.name);
       await editSmartObject(freshSmartObject);
 
       // Fetch all inner layers and their info in one shot AFTER opening the SO
@@ -129,7 +129,7 @@ export async function editSmartObject(smartObject) {
     //   photoshop.app.showAlert("No layer provided.");
     //   return;
     // }
-    console.log("MUH EDITING:", smartObject.name);
+    // console.log("MUH EDITING:", smartObject.name);
    const result = await batchPlay(
       [
          {
@@ -258,7 +258,7 @@ export function getAllVisibleLayers(layers, result = []) {
     result.push(layer);
     if (layer.layers?.length) getAllVisibleLayers(layer.layers, result);
   }
-  console.log(`Found ${result.length} visible layers in total.`);
+  // console.log(`Found ${result.length} visible layers in total.`);
   return result;
 }
 
@@ -283,7 +283,7 @@ export function getSmartObjectInstances(layer, allLayers, allInfos, layerIndexMa
   const layerInfo = allInfos[idx];
 
   if (!layerInfo.smartObjectMore) {
-    console.log(`Layer "${layer.name}" is not a Smart Object.`);
+    // console.log(`Layer "${layer.name}" is not a Smart Object.`);
     return null;
   }
 
@@ -412,5 +412,5 @@ const cropTarget =
 
   ], { synchronousExecution: true });
 
-  console.log(`Cropped canvas to layer: "${cropTarget.name}"`);
+  // console.log(`Cropped canvas to layer: "${cropTarget.name}"`);
 }

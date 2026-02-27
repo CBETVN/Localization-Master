@@ -174,6 +174,7 @@ export async function processMatchedFolder(folderLayer, appState, translatedSOId
     const internalId = childSOInfos[i]?.smartObjectMore?.ID;
     if (internalId) soIdMap.set(l.id, internalId);
   });
+  // console.log("soIdMap:", JSON.stringify([...soIdMap.entries()]));
 
   const childLayers = [...folderLayer.layers].map((layer, i) => ({
     id:         layer.id,
@@ -203,9 +204,13 @@ export async function processMatchedFolder(folderLayer, appState, translatedSOId
     if (child.layer.kind === constants.LayerKind.SMARTOBJECT) {
       const internalSOId = soIdMap.get(child.id);
 
+
+      console.log(`translatedSOIds has ${internalSOId}:`, translatedSOIds.has(internalSOId));
+
+
       // Skip if this SO's internal document was already translated by another instance
       if (internalSOId && translatedSOIds.has(internalSOId)) {
-        console.log(`[SKIP] "${child.layer.name}" already translated (shared SO instance).`);
+        console.log(`["${child.layer.name}", "with internal SO ID: ${child.layer.id}" is instance and is skipped`);
         continue;
       }
 
@@ -233,9 +238,9 @@ function isTextfieldValueValid(value) {
 
 
 export async function translateSelected(appState) {
-  console.log("translateSelected called", appState);
+  // console.log("translateSelected called", appState);
   const selLayers = app.activeDocument.activeLayers;
-  console.log("selLayers:", selLayers.length, selLayers[0]?.kind);
+  // console.log("selLayers:", selLayers.length, selLayers[0]?.kind);
 
   
   if (selLayers.length !== 1) {
@@ -268,7 +273,7 @@ export async function translateSelected(appState) {
     await ps.translateSmartObject(layer, translation);
   }
 
-  console.log(`Translated "${layer.name}" → "${translation}"`);
+  // console.log(`Translated "${layer.name}" → "${translation}"`);
   // const confirmed = confirm(`Translate layer "${layer.name}"?`);
   // console.log("confirm result:", confirmed);
   // console.log("Translating selected layer: ", appState.suggestionTextfieldValue);
