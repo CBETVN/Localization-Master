@@ -14,6 +14,8 @@ import { GenerateSuggestionsButton } from "./components/GenerateSuggestionsButto
 import { TranslateSelectedTextField } from "./components/TranslateSelectedTextField";
 import { TranslateSelectedButton } from "./components/TranslateSelectedButton";
 import { GuessThePhrase } from "./components/GuessThePhrase";
+import { ValidateMasterFile } from "./components/ValidateMasterFile";
+import * as validate from "./api/validateMasterFile";
 import * as pl from "./api/parsingLogic";
 // import * as XLSX from "./lib/xlsx.full.min.js";
 
@@ -142,20 +144,17 @@ export const App = () => {
     api.notify("Hello World");
   };
 
-  function findLayersPosition() {
-  const selectedLayer = app.activeDocument.activeLayers[0];
 
-  if (selectedLayer.kind === "group") {
-      const groupLayers = selectedLayer.layers;
-
-      console.log(`Layers in group "${selectedLayer.name}":`);
-      groupLayers.forEach((layer, index) => {
-          console.log(`Position ${index} (0 = top): ${layer.name}`);
-      });
-  } else {
-      console.log("Selected layer is not a group.");
-  }
-  }
+  const handleValidateMasterFile = async () => {
+    try {
+      setIsProcessing(true);
+      await validate.getNestedSOData();
+    } catch (error) {
+      console.error("Error validating master file:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+    };
 
 
   return (
@@ -177,6 +176,7 @@ export const App = () => {
           </div>
           <TranslateAllButton appState={appState} />
           <GuessThePhrase onClick={handleGuessThePhrase} disabled={isProcessing || !selectedLanguage} />
+          <ValidateMasterFile onClick={handleValidateMasterFile} disabled={isProcessing} />
           <div className="card">
             {/* <button onClick={async () => {
             // const activeLayer = app.activeDocument.activeLayers[0];

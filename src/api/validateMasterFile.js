@@ -1,22 +1,16 @@
 import { photoshop } from "../globals";
+import { uxp } from "../globals";
+import { getAllLayers } from "./photoshop.js";
+import { parsePsd, extractUuidFromBlock } from "./psdParser.js";
 const { app, core,action, constants } = photoshop;
 const { executeAsModal } = photoshop.core;
 const { batchPlay } = photoshop.action;
-import { uxp } from "../globals";
 
-
-const { parsePsd, extractUuidFromBlock } = require("./psdParser.js");
-const { localFileSystem: fs, formats } = require("uxp").storage;
-const { entrypoints } = require("uxp");
-const { app, core, uxp, action, constants } = require("photoshop");
-const { batchPlay } = require("photoshop").action;
-// const{uxp} = require("photoshop");
-const { executeAsModal } = require("photoshop").core;
-const { localFileSystem: fs, formats } = uxp.storage
+const { localFileSystem: fs, formats } = uxp.storage;
 
 
 
-async function getDataFromSO() {
+export async function getNestedSOData() {
   try {
     const doc = app.activeDocument;
     if (!doc) { console.error('No active document.'); return; }
@@ -43,23 +37,9 @@ async function getDataFromSO() {
       }
     }
   } catch (err) {
-    console.error('getDataFromSO error:', err.message, err.stack);
+    console.error('getNestedSOData error:', err.message, err.stack);
   }
 }
-
-
-
-function extractPsbFromLiFD(view, bytes, start, end) {
-  // Scan FORWARDS for the FIRST '8BPS' signature — that is the start of the PSB.
-  // (Scanning backwards would find nested PSBs inside Smart Objects first.)
-  for (let i = start; i <= end - 4; i++) {
-    if (bytes[i]===0x38 && bytes[i+1]===0x42 && bytes[i+2]===0x50 && bytes[i+3]===0x53) {
-      return view.buffer.slice(i, end);
-    }
-  }
-  return null;
-}
-
 
 
 
@@ -182,6 +162,62 @@ function buildNestedSOMapFast(buffer) {
 
 
 
+function liFDRecordHasNestedSO(bytes, view, recStart, recEnd) {
+  // Find 8BPS signature inside this liFD record
+  // It's usually within the first ~300 bytes of the record (after metadata)
+  const searchEnd = Math.min(recStart + 400, recEnd);
+  let bpsOff = -1;
+  for (let i = recStart; i < searchEnd - 4; i++) {
+    if (bytes[i]===0x38 && bytes[i+1]===0x42 && bytes[i+2]===0x50 && bytes[i+3]===0x53) {
+      bpsOff = i;
+      break;
+    }
+  }
+  if (bpsOff < 0) return false;
+
+  try {
+    const innerIsPsb = bytes[bpsOff+4] === 0x00 && bytes[bpsOff+5] === 0x02;
+    const base = bpsOff;
+
+    // Jump to Color Mode Data
+    const colorModeLen = view.getUint32(base + 26, false);
+    const imgResOff = base + 26 + 4 + colorModeLen;
+    if (imgResOff + 4 > recEnd) return false;
+
+    // Jump to Image Resources
+    const imgResLen = view.getUint32(imgResOff, false);
+    const layerMaskOff = imgResOff + 4 + imgResLen;
+    if (layerMaskOff + (innerIsPsb ? 8 : 4) > recEnd) return false;
+
+    // Jump to Layer and Mask Info
+    const layerMaskLen = innerIsPsb
+      ? view.getUint32(layerMaskOff, false) * 0x100000000 + view.getUint32(layerMaskOff+4, false)
+      : view.getUint32(layerMaskOff, false);
+    const layerMaskStart = layerMaskOff + (innerIsPsb ? 8 : 4);
+    const layerMaskEnd = Math.min(layerMaskStart + layerMaskLen, recEnd);
+
+    // Skip Layer Info
+    let pos = layerMaskStart;
+    if (pos + (innerIsPsb ? 8 : 4) > layerMaskEnd) return false;
+    const layerInfoLen = innerIsPsb
+      ? view.getUint32(pos, false) * 0x100000000 + view.getUint32(pos+4, false)
+      : view.getUint32(pos, false);
+    pos += (innerIsPsb ? 8 : 4) + layerInfoLen;
+    if (pos % 2 !== 0) pos++;
+
+    // Skip Global Mask
+    if (pos + 4 > layerMaskEnd) return false;
+    const globalMaskLen = view.getUint32(pos, false);
+    pos += 4 + globalMaskLen;
+
+    // Scan GALI only — tiny section, no pixel data
+    return bytesHasLnk2(bytes, view, pos, layerMaskEnd, innerIsPsb);
+  } catch(e) {
+    // Fallback: scan whole record, use correct isPsb
+    const fallbackIsPsb = bpsOff >= 0 && bytes[bpsOff+4] === 0x00 && bytes[bpsOff+5] === 0x02;
+    return bytesHasLnk2(bytes, view, recStart, recEnd, fallbackIsPsb);
+  }
+}
 
 
 

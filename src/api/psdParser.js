@@ -26,7 +26,7 @@ class PsdReader {
 
 const PSB_LARGE_KEYS = new Set(['LMsk','Lr16','Lr32','Layr','Mt16','Mt32','Mtrn','Alph','FMsk','lnk2','FEid','FXid','PxSD']);
 
-function parsePsd(buffer) {
+export function parsePsd(buffer) {
   const r = new PsdReader(buffer);
   const results = { isValid: false, isPsb: false, layers: [] };
   if (r.readString(4) !== '8BPS') return results;
@@ -192,7 +192,7 @@ function parseAdditionalLayerInfo(r, layer, limit) {
  * Scans raw bytes between start and end for a UUID pattern.
  * Tries both ASCII and UTF-16BE encodings.
  */
-function extractUuidFromBlock(buffer, start, end) {
+export function extractUuidFromBlock(buffer, start, end) {
   const bytes = new Uint8Array(buffer);
   const clampedEnd = Math.min(end, bytes.length);
 
@@ -236,5 +236,3 @@ function extractUuidFromBlock(buffer, start, end) {
 
   return null;
 }
-
-module.exports = { parsePsd, extractUuidFromBlock };
