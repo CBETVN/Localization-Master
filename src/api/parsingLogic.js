@@ -103,11 +103,16 @@ export async function translateAll(appState) {
   }
 
   const allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
-  const layerIndexMap = new Map(allVisibleLayers.map((l, i) => [l.id, i]));
 
-  // Single batchPlay fetch for all layers
+  //creates a map of layer.id → index in allVisibleLayers for O(1)/ lookup during the loop, avoiding repeated .findIndex calls
+  const layerIndexMap = new Map(allVisibleLayers.map((layer, i) => [layer.id, i]));
+
+  // Single bulk batchPlay call to fetch the full Photoshop descriptor for every visible layer at once.
+  // Each entry in allInfos corresponds to the layer at the same index in allVisibleLayers.
+  // The key data used from each descriptor is smartObjectMore.ID — the internal SO document ID
+  // shared across all instances of the same linked Smart Object, used for deduplication.
   const allInfos = await batchPlay(
-    allVisibleLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+    allVisibleLayers.map(layer => ({ _obj: "get", _target: [{ _ref: "layer", _id: layer.id }] })),
     { synchronousExecution: true }
   );
 
@@ -121,7 +126,9 @@ export async function translateAll(appState) {
 
     // Guard: skip if this SO's internal document was already translated.
     // Uses smartObjectMore.ID so all instances of the same SO are blocked by one entry.
+    //1.Give me this layer's position in the array 2. Give me the full descriptor for this layer from allInfos using that position 3. Dig out the internal smart object document ID from the descriptor
     const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
+    //If this SO was already translated by another instance, skip it
     if (layerSOId && translatedSOIds.has(layerSOId)) continue;
 
     if (ps.isLayerAGroup(layer)) {
