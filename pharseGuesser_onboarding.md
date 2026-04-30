@@ -30,62 +30,65 @@ The algorithm must figure out that "won copy 2" belongs to the phrase **"TOTAL C
 
 ---
 
-## Failed Approaches (and why)
+## Algorithm
 
-### Approach 1: Bottom-up sibling collection (original)
+### Key Insights
 
-**Idea:** Walk up from the layer, at each ancestor collect sibling SO/text layer names, join them as a candidate phrase.
+1. **Only SO/text layer names are meaningful.** Folder names are always traversed transparently — never collected. This avoids CamelCase scene folder names polluting the compound.
 
-**Problem:** At the `won` folder level, siblings are `won` and `won copy 2` — both SOs. But the sibling *folders* (`credits`, `total`) aren't SOs, so they're invisible. Result: candidate = `"won"` only.
+2. **SO/text names are filtered by an 80% phrase-match threshold** (`_nameMatchesSomePhrase`). A name is kept only if ≥ 80% of its words appear in at least one EN phrase. This dismisses noise names like `off` (0/1 match), `doubleChanceOnLandscape` (CamelCase → single token, no match), while keeping `chance` (1/1) and `for bonus` (2/2). The denominator is the candidate's own word count, not `max(...)`, so short but valid names always pass.
 
-### Approach 2: Collect sub-folder names when no SO siblings exist
+3. **Find the container by climbing, not by fixed depth.** Walk up from the layer, collecting the compound of SO/text names at each ancestor level. Keep climbing as long as all words in the compound can be explained by the current best-matching phrase. Stop when a word appears that doesn't belong to any phrase — that word came from a sibling phrase's SO leaking in.
 
-**Idea:** If a folder has no direct SO/text children, collect its non-noise sub-folder names instead.
-
-**Problem:** Used `child.layers` to detect folders — but `total`'s `.layers` was `undefined` in UXP (unexpanded group quirk). Then tried `child.kind === GROUP` — but `total`'s kind wasn't GROUP either (Photoshop internal weirdness with effects on groups). Result: `total` was always silently dropped.
-
-### Approach 3: Remove all kind/layers guards
-
-**Idea:** Any non-translatable, non-noise sibling is a word-folder. No guards needed.
-
-**Problem:** Worked for the immediate level but the algorithm kept climbing past the phrase boundary, collecting unrelated top-level folder names (`multiplierCreditsWon`, `multiplierWin`, etc.), which polluted candidates.
-
-### Approach 4: Container boundary + full recursive collection
-
-**Idea:** Find the "phrase container" (depth-2 ancestor from document root), then recursively collect ALL names inside it.
-
-**Problem:** The container holds structural elements too (`background`, `Slices`, `common`, `numbers`, `texture`). The compound candidate had 10+ words, so scoring `3/10 = 0.3` against a 3-word phrase — below the 0.5 threshold. The partial match `"credits won"` (ratio 1.0) won instead.
-
-### Approach 5 (current, working): Vocabulary-filtered container collection
-
-See below.
-
----
-
-## Current Working Algorithm
-
-### Key Insight
-
-Build a **vocabulary set** from all EN phrases upfront. When scanning a container, only collect names whose words exist in the vocabulary. This naturally filters out structural noise (`background`, `Slices`, `common`, `texture`) while keeping phrase-relevant names (`total`, `credits won`, `won`).
+4. **Allow the best-match phrase to upgrade while climbing.** A layer inside `won/` starts with compound `{WON}` → seeds "TOTAL WON". As climbing adds `CREDITS` and `TOTAL`, the phrase upgrades to "TOTAL CREDITS WON" — all words still explained → correct.
 
 ### Step-by-step
 
-1. **Build vocabulary:** Extract every unique uppercased word from all EN phrases → `{TOTAL, CREDITS, WON, FREE, SPINS, WIN, ...}`
+1. **Find phrase container** (`_findPhraseContainer`): Walk up from the layer's parent toward the document root. At each ancestor:
+   - Collect all SO/text layer names recursively via `_collectVocabNames` (folders are transparent; only names passing the 80% threshold are kept).
+   - Score the compound against all EN phrases (word-overlap ratio).
+   - If score ≥ 0.5: check for **unexplained words** — any compound word not present in the best-match phrase. If found → a sibling phrase leaked in → **stop**, return the previous ancestor (`lastGoodAncestor`).
+   - Otherwise: update `lastGoodAncestor = current` and keep climbing.
+   - If score drops below 0.5 after seeding → **stop**.
+   - Fallback: if nothing ever matched, use depth-2 logic (climb until `current.parent.parent` is null).
 
-2. **Find phrase container:** Walk up from the layer. The container is the ancestor at **depth 2 from document root** — i.e., `ancestor.parent` exists but `ancestor.parent.parent` does not. This is the top-level group that holds one complete phrase/scene. Its **name is NOT used** as a candidate (it's unreliable, e.g., `outroTotalCreditsWonLandscape`).
+2. **Collect ancestor candidates:** Walk up from the layer to the container, collecting non-noise ancestor folder names as individual candidates. E.g., `"won"`, `"credits won"`.
 
-3. **Collect ancestor candidates:** Walk up from the layer to the container, collecting non-noise folder names as individual candidates. E.g., `"won"`, `"credits won"`.
+3. **Collect SO/text names from container** (`_collectVocabNames`): Recursively scan the container, collecting SO/text baseNames (with "copy N" stripped) that pass the 80% phrase-match threshold. All names are deduplicated (case-insensitive). Result is joined into a single compound candidate.
 
-4. **Collect vocab-filtered names from container:** Recursively scan the container:
-   - **Noise folders** (`EN`, `BG`, `Group 3`, language codes): recurse into them transparently, don't collect their names.
-   - **Translatable layers** (SO/text): collect baseName (with "copy N" stripped) if any word is in vocabulary.
-   - **Other children**: collect name if any word is in vocabulary, then recurse into them too.
-   - All names are deduplicated (case-insensitive).
-   - Result is joined into a single compound candidate.
+4. **Score candidates:** Each candidate is normalized (uppercase, strip `(...)` and `[...]`) and scored against each EN phrase using **word-overlap ratio** = `shared_words / max(words_in_candidate, words_in_phrase)`. Ties broken by absolute shared-word count.
 
-5. **Score candidates:** Each candidate is normalized (uppercase, strip `(...)` and `[...]`) and scored against each EN phrase using **word-overlap ratio** = `shared_words / max(words_in_candidate, words_in_phrase)`. Ties are broken by **absolute shared-word count** (a 3-word perfect match beats a 2-word perfect match).
+5. **Return best match** if score ≥ 0.5.
 
-6. **Return best match** if score ≥ 0.5.
+### Why Unexplained-Words Stops at the Right Place
+
+```
+buttons
+└── Landscape
+    ├── buyBonusBtn
+    │   └── buyFeatureOff
+    │       └── EN
+    │           ├── BONUS (SO)   ← vocab word
+    │           └── BUY (SO)     ← vocab word
+    └── doubleChanceBtn
+        └── doubleChanceOffLandscape
+            └── txt only
+                └── EN
+                    ├── x2 (SO)
+                    ├── for bonus (SO)
+                    └── chance (SO)   ← selected layer
+```
+
+Walking up from `chance`:
+| Level | Compound | Best match | Unexplained? | Action |
+|---|---|---|---|---|
+| `EN` | `{X2, FOR BONUS, CHANCE}` | "X2 CHANCE FOR BONUS" 1.0 | none | advance |
+| `txt only` | same | same | none | advance |
+| `doubleChanceOffLandscape` | same | same | none | advance |
+| `doubleChanceBtn` | same | same | none | advance |
+| `Landscape` | adds `BUY` | "X2 CHANCE FOR BONUS" | `BUY` not in phrase | **STOP** |
+
+Returns `doubleChanceBtn` ✓
 
 ### Scoring Tiebreaker — Why It Matters
 
@@ -104,11 +107,7 @@ Without the `bestShared` tiebreaker, `"credits won"` (2 words, ratio 1.0 vs "CRE
 
 ## Noise Detection
 
-A layer/folder name is "noise" if:
-- It's in the `_NOISE_NAMES` set: `BG`, `SLICES`, `BACKGROUND`, or any supported language code (`EN`, `DE`, `HR`, etc.)
-- It matches `Group N` pattern (e.g., `Group 3`, `group 12`)
-
-Noise folders are traversed transparently — their children are collected but the folder name itself is not.
+`_NOISE_NAMES` (`BG`, `SLICES`, `BACKGROUND`, all language codes) and `Group N` patterns are still defined but **no longer used inside `_collectVocabNames`** — all non-translatable children are now treated uniformly as transparent containers. The noise set is kept for the ancestor-candidates walk in `_buildPhraseCandidates`, which skips noise folder names when building individual ancestor candidates.
 
 ---
 

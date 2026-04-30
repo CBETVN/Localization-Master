@@ -7,6 +7,7 @@ import { photoshop } from "../globals";
 import * as ps from "./photoshop.js"; // Import all Photoshop API functions as ps
 // import {app} from "../globals"; // Import app for showing alerts, etc.
 // Access XLSX from global scope
+import * as phraseGuesser from "./phraseGuesser";
 const XLSX = window.XLSX;
 const { core, app, constants } = photoshop;
 const { executeAsModal } = photoshop.core;
@@ -301,7 +302,8 @@ export async function generateSuggestions(layer, appState) {
     app.showAlert("Cant find phrase reference for this layer.");
     return null;
   }
-  const suggestion = extractMatchingPhrase(parentFolder, appState);
+  // const suggestion = extractMatchingPhrase(parentFolder, appState);
+  const suggestion = phraseGuesser.guessThePhrase(layer, appState)?.translatedPhrase;
   if (suggestion) { 
     console.log("Suggestion found:", suggestion);
     return parsePhraseForSuggestions(suggestion);
