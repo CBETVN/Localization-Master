@@ -47,7 +47,15 @@ export async function translateSmartObject(smartObject, translation) {
       }
 
       // console.log("Entering edit mode for Smart Object:", freshSmartObject.name);
+      const mainDocId = app.activeDocument.id;
       await editSmartObject(freshSmartObject);
+
+      // Guard: if editSmartObject failed (e.g. "Edit Contents not available"), the active
+      // document is still the main PSD. Bail out immediately — do NOT close it.
+      if (app.activeDocument.id === mainDocId) {
+        console.warn(`[translateSmartObject] Could not open SO "${freshSmartObject.name}" — skipping`);
+        return;
+      }
 
       // Fetch all inner layers and their info in one shot AFTER opening the SO
       const allLayers = getAllLayers(app.activeDocument.layers);
@@ -255,6 +263,7 @@ export function getAllLayers(layers) {
 export function getAllVisibleLayers(layers, result = []) {
   for (const layer of layers) {
     if (!layer.visible) continue; // skip invisible layer AND its entire subtree
+    if (layer.locked) continue;   // skip locked layer AND its entire subtree
     result.push(layer);
     if (layer.layers?.length) getAllVisibleLayers(layer.layers, result);
   }
@@ -264,32 +273,72 @@ export function getAllVisibleLayers(layers, result = []) {
 
 
 
+export async function getSOid(layer) {
+  const layerInfo = await getLayerInfo(layer);
+  return layerInfo?.smartObjectMore?.ID || null;
+}
+
+
+
+
+// Tankes an array of SOs and returns only the unique SOs
+export async function purgeSOInstancesFromArray(array) {
+  //Unique IDs
+  const uniqueSOids = new Set();
+  //Unique Layers
+  const uniqueLayers = [];
+
+  for (const layer of array) {
+    // Check only SO layers as only SOs have the smartObjectMore.ID property that we rely on for uniqueness. Non-SO layers will be ignored and can appear multiple times without affecting the result.
+    if (layer.kind !== "smartObject") continue;  
+    
+    const layerSOid = await getSOid(layer);
+    
+    if (uniqueSOids.has(layerSOid)){continue;} 
+    else {uniqueSOids.add(layerSOid); uniqueLayers.push(layer);}
+  }
+
+  return uniqueLayers;
+}
+
+
+
+
+
+
+
+
+
 
 
 
 
 /**
  * Returns all layers that share the same Smart Object ID as the given layer.
- * Operates entirely in memory using pre-fetched layer data — no Photoshop API calls.
+ * Fetches layer descriptors internally via batchPlay.
  *
  * @param {Layer} layer - The reference Smart Object layer to match against.
- * @param {Layer[]} allLayers - Flat array of all document layers (from getAllLayers).
- * @param {Object[]} allInfos - batchPlay info objects for all layers, same order as allLayers.
- * @param {Map<number, number>} layerIndexMap - Map of layer.id -> index in allLayers for O(1) lookup.
+ * @param {Layer[]} array - Flat array of layers to search within (e.g. allVisibleLayers).
  * @returns {Layer[]|null} Array of matching instances, or null if the layer is not a Smart Object.
  */
-export function getSmartObjectInstances(layer, allLayers, allInfos, layerIndexMap) {
-  const idx = layerIndexMap.get(layer.id);
-  const layerInfo = allInfos[idx];
+export async function getSmartObjectInstances(layer, array) {
+  const allInfos = await batchPlay(
+    array.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+    { synchronousExecution: true }
+  );
 
-  if (!layerInfo.smartObjectMore) {
-    // console.log(`Layer "${layer.name}" is not a Smart Object.`);
+  // Map layer.id → descriptor — stable regardless of array mutations or reordering
+  const infoById = new Map(array.map((l, i) => [l.id, allInfos[i]]));
+
+  const layerInfo = infoById.get(layer.id);
+
+  if (!layerInfo?.smartObjectMore) {
     return null;
   }
 
   const targetSOid = layerInfo.smartObjectMore.ID;
 
-  const instances = allLayers.filter((l, i) => allInfos[i].smartObjectMore?.ID === targetSOid);
+  const instances = array.filter(l => infoById.get(l.id)?.smartObjectMore?.ID === targetSOid);
 
   console.log(`Found ${instances.length} instance(s) of "${layer.name}"`);
   return instances;

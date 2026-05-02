@@ -18,6 +18,23 @@ const { batchPlay } = photoshop.action;
  * @param {File|ArrayBuffer} fileOrArrayBuffer - UXP file object or ArrayBuffer
  * @returns {Object} - { languageData, availableLanguages }
  */
+
+
+
+let allVisibleLayers;
+let smartObjectsForProcessing = [];
+let processedIds = new Set(); // Tracks SmartObjectMoreIDs already translated in this run. Shared across translateAll and processMatchedFolder to prevent duplicate translations of instances.
+
+
+
+
+
+
+
+
+
+
+
 export async function parseExcelFile(fileOrArrayBuffer) {
   let arrayBuffer;
   
@@ -79,6 +96,28 @@ function extractLanguageData(workbook) {
 
 
 
+function getAllEnglishwords(appState) {
+  const allEnglishPhrases = appState.languageData && appState.languageData["EN"];
+  const allEnglishWords = new Set(allEnglishPhrases.flatMap(p => p.split(/\s+/).filter(Boolean)).map(normalizeForMatch));
+  return allEnglishWords;
+}
+
+
+//helper function to normalize layer names and phrases for matching, stripping annotations and normalizing whitespace
+function normalizeForMatch(str) {
+  return str
+    .replace(/[()]/g, "")
+    .replace(/\[.*?\]/g, "")
+    .replace(/[^\w\s]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(w => !/^\d+$/.test(w))
+    .join(" ");
+}
+
+
 /**
  * Scans all visible layers in the active document and identifies unique Smart Objects
  * and matching EN folder names for translation.
@@ -91,8 +130,85 @@ function extractLanguageData(workbook) {
  * @param {string} appState.selectedLanguage - The target language code (e.g. "DE", "SK").
  * @param {Object} appState.languageData - Map of language code -> array of phrases.
  */
+
+
+
+
+
+
+
+
+// export async function translateAll(appState) {
+//   const startTime = Date.now();
+//   if (!appState.selectedLanguage) {
+//     app.showAlert("Please select a language first");
+//     return;
+//   }
+//   if (!appState.languageData?.["EN"]) {
+//     app.showAlert("No data loaded.");
+//     return;
+//   }
+
+//   const allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
+
+//   //creates a map of layer.id → index in allVisibleLayers for O(1)/ lookup during the loop, avoiding repeated .findIndex calls
+//   const layerIndexMap = new Map(allVisibleLayers.map((layer, i) => [layer.id, i]));
+
+//   // Single bulk batchPlay call to fetch the full Photoshop descriptor for every visible layer at once.
+//   // Each entry in allInfos corresponds to the layer at the same index in allVisibleLayers.
+//   // The key data used from each descriptor is smartObjectMore.ID — the SmartObjectMoreID
+//   // shared across all instances of the same linked Smart Object, used for deduplication.
+//   const allInfos = await batchPlay(
+//     allVisibleLayers.map(layer => ({ _obj: "get", _target: [{ _ref: "layer", _id: layer.id }] })),
+//     { synchronousExecution: true }
+//   );
+
+//   // Tracks SmartObjectMoreIDs, not layer instance IDs.
+//   // Shared with processMatchedFolder so both branches see the same picture
+//   // regardless of which one encounters a given SO first.
+//   const translatedSOIds = new Set();
+
+//   for (const layer of allVisibleLayers) {
+//     if (!layer.visible) continue;
+
+//     // Guard: skip if this SO's internal document was already translated.
+//     // Uses smartObjectMore.ID so all instances of the same SO are blocked by one entry.
+//     //1.Give me this layer's position in the array 2. Give me the full descriptor for this layer from allInfos using that position 3. Dig out the internal smart object document ID from the descriptor
+//     const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
+//     //If this SO was already translated by another instance, skip it
+//     if (layerSOId && translatedSOIds.has(layerSOId)) continue;
+
+//     if (ps.isLayerAGroup(layer)) {
+//       if (isNameENPhrase(layer.name, appState)) {
+//         console.log(`Layer: ${layer.name} is a matching folder`);
+//         // Pass translatedSOIds so processMatchedFolder can check and populate it
+//         await processMatchedFolder(layer, appState, translatedSOIds, allInfos, layerIndexMap);
+//       }
+//       continue;
+//     }
+
+//     if (layer.kind !== constants.LayerKind.SMARTOBJECT) continue;
+
+//     const layerInstances = ps.getSmartObjectInstances(layer, allVisibleLayers, allInfos, layerIndexMap);
+//     if (!layerInstances) continue;
+
+//     // Mark the SmartObjectMoreID so all instances are blocked from here on
+//     if (layerSOId) translatedSOIds.add(layerSOId);
+//   }
+//   console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
+// }
+
+
+
+
+
+//New function that works on SO logic
 export async function translateAll(appState) {
   const startTime = Date.now();
+
+  // Clear the set of processed layer IDs at the start of each full translation run
+  processedIds.clear();
+
   if (!appState.selectedLanguage) {
     app.showAlert("Please select a language first");
     return;
@@ -101,104 +217,157 @@ export async function translateAll(appState) {
     app.showAlert("No data loaded.");
     return;
   }
+  const allEnglishWords = getAllEnglishwords(appState);
+  console.log("All English words for matching:", allEnglishWords);
+  allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
+  const allSOs = allVisibleLayers.filter(layer => layer.kind === constants.LayerKind.SMARTOBJECT);
+  smartObjectsForProcessing = await ps.purgeSOInstancesFromArray(allSOs);
+  console.log(`Found ${smartObjectsForProcessing.length} smart objects `, smartObjectsForProcessing.map(l => l.name));
 
-  const allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
 
-  //creates a map of layer.id → index in allVisibleLayers for O(1)/ lookup during the loop, avoiding repeated .findIndex calls
-  const layerIndexMap = new Map(allVisibleLayers.map((layer, i) => [layer.id, i]));
 
-  // Single bulk batchPlay call to fetch the full Photoshop descriptor for every visible layer at once.
-  // Each entry in allInfos corresponds to the layer at the same index in allVisibleLayers.
-  // The key data used from each descriptor is smartObjectMore.ID — the internal SO document ID
-  // shared across all instances of the same linked Smart Object, used for deduplication.
-  const allInfos = await batchPlay(
-    allVisibleLayers.map(layer => ({ _obj: "get", _target: [{ _ref: "layer", _id: layer.id }] })),
-    { synchronousExecution: true }
-  );
 
-  // Tracks internal SO document IDs (smartObjectMore.ID), not layer instance IDs.
-  // Shared with processMatchedFolder so both branches see the same picture
-  // regardless of which one encounters a given SO first.
-  const translatedSOIds = new Set();
+  for (const layer of smartObjectsForProcessing) {
 
-  for (const layer of allVisibleLayers) {
-    if (!layer.visible) continue;
+    const layerSOId = await ps.getSOid(layer);
+    // DIAGNOSTIC: log the ID we just got and what's currently in processedIds
+    // Hypothesis: translateSmartObject changes smartObjectMore.ID, so the ID queried here
+    // after translation differs from what processMatchedFolder stored — guard never fires.
+    console.log(`[translateAll] layer "${layer.name}" SmartObjectMoreID: ${layerSOId}`);
+    // console.log(`[translateAll] processedIds at this point:`, [...processedIds]);
+
+    // Guard: skip if this layer ID was already processed in this run, either as a folder match or as an instance of a matched SO. This prevents duplicate processing of the same layer if it appears in multiple folders or is a nested instance.
+    if (processedIds.has(layerSOId)) {
+      // DIAGNOSTIC: confirm the guard fired
+      console.log(`[translateAll] SKIPPING "${layer.name}" — ID ${layerSOId} already in processedIds`);
+      continue;
+    }
+    console.log(`[translateAll] NOT skipped — proceeding with "${layer.name}"`);
+
+    console.log(`Processing layer "${layer.name}"`, `smart objects for processing: ${smartObjectsForProcessing.length}`);
+    const guessResult = phraseGuesser.guessThePhrase(layer, appState);
+    if (guessResult) {
+      console.log(`Layer "${layer.name} has to be translated":`, guessResult);
+    }
+    
+    const layerENGPhrase = guessResult?.enPhrase;
+    const layerContainerFolder = guessResult?.container;
+    const layerTranslatedPhrase = guessResult?.translatedPhrase;
+
+    if (layerENGPhrase && layerTranslatedPhrase && layerContainerFolder) {
+
+      await processMatchedFolder(layerContainerFolder, appState, layerENGPhrase, layerTranslatedPhrase);
+
+      // const hasInstances = await ps.getSmartObjectInstances(layer, smartObjectsForProcessing);
+      
+      // if (hasInstances !== null) {
+      //   for (const instance of hasInstances) {
+      //     const instanceSOId = await ps.getSOid(instance);
+      //     processedIds.add(instanceSOId);
+      //     console.log(`Processing instance "${instance.name}" of "${layer.name} with ID: ${instanceSOId}"`);
+      //   }
+      // }
+    }
+      // await processMatchedFolder(layerContainerFolder, appState, translatedSOIds, allInfos, layerIndexMap, layerENGPhrase, layerTranslatedPhrase);
+      // translatedSOIds.add(layerSOId);
+      // } else {
+      //   console.warn(`[translateAll] Skipped "${layer.name}":`, { layerENGPhrase, layerTranslatedPhrase, layerContainerFolder });
+      // }
 
     // Guard: skip if this SO's internal document was already translated.
     // Uses smartObjectMore.ID so all instances of the same SO are blocked by one entry.
-    //1.Give me this layer's position in the array 2. Give me the full descriptor for this layer from allInfos using that position 3. Dig out the internal smart object document ID from the descriptor
-    const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
-    //If this SO was already translated by another instance, skip it
-    if (layerSOId && translatedSOIds.has(layerSOId)) continue;
+    // 1.Give me this layer's position in the array 2. Give me the full descriptor for this layer from allInfos using that position 3. Dig out the internal smart object document ID from the descriptor
+    // const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
+    
+    //If this layer isnt already translated and its name matches the EN vocab, mark it for translation and add its SO ID to the set to block all its instances
+    // if (layerSOId && !translatedSOIds.has(layerSOId) && layerNameMatchesEnVocab(layer.name, allEnglishWords, 0.8)){
 
-    if (ps.isLayerAGroup(layer)) {
-      if (isNameENPhrase(layer.name, appState)) {
-        console.log(`Layer: ${layer.name} is a matching folder`);
-        // Pass translatedSOIds so processMatchedFolder can check and populate it
-        await processMatchedFolder(layer, appState, translatedSOIds, allInfos, layerIndexMap);
-      }
-      continue;
-    }
 
-    if (layer.kind !== constants.LayerKind.SMARTOBJECT) continue;
+    // } else if (!layerSOId && layerNameMatchesEnVocab(layer.name, allEnglishWords, 0.8)) {
+    //   console.warn(`[translateAll] No SO ID for layer "${layer.name}" — skipping`);
+    // } 
 
-    const layerInstances = ps.getSmartObjectInstances(layer, allVisibleLayers, allInfos, layerIndexMap);
-    if (!layerInstances) continue;
 
-    // Mark the internal SO document ID so all instances are blocked from here on
-    if (layerSOId) translatedSOIds.add(layerSOId);
   }
-  console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
 }
 
 
 
 
 
+function charOverlapRatio(a, b) {
+  const pool = b.split("");
+  let matched = 0;
+  for (const c of a) {
+    const i = pool.indexOf(c);
+    if (i !== -1) { matched++; pool.splice(i, 1); }
+  }
+  return matched / Math.max(a.length, b.length);
+}
+
+function layerNameMatchesEnVocab(layerName, allEnglishWords, threshold = 0.8) {
+  const nameStr = normalizeForMatch(layerName).replace(/\s/g, "");
+  if (!nameStr) return false;
+  for (const word of allEnglishWords) {  // allEnglishWords is the Set of individual words
+    if (charOverlapRatio(nameStr, word) >= threshold) return true;
+  }
+  return false;
+}
 
 
+export async function processMatchedFolder(folderLayer, appState, matchedPhrase, translatedPhrase) {
 
+  // STEP 1: Parse the EN phrase into individual words (one per array entry).
+  // e.g. "BUY\nBONUS" → ["BUY", "BONUS"]
+  // These are used to match against child layer names inside the folder.
+  const enLines = parseRawPhrase(matchedPhrase, "linesArray");
+  console.log(`${enLines} `);
+  const transPhrase = translatedPhrase;
 
-export async function processMatchedFolder(folderLayer, appState, translatedSOIds = new Set(), allInfos = null, layerIndexMap = null) {
-
-  // folderLayer.name IS the EN phrase — no need to look it up again
-  const enLines    = parseRawPhrase(folderLayer.name, "linesArray");
-
-  // Only need to look up the translation
-  const transPhrase = extractMatchingPhrase(folderLayer, appState);
+  // STEP 2: Guard — if there's no translation for this phrase, nothing to do.
   if (!transPhrase) return;
 
+  // STEP 3: Parse the translated phrase into individual words the same way.
+  // e.g. "BONUS KAUFEN" → ["BONUS", "KAUFEN"]
+  // The count of transLines may differ from enLines — e.g. EN has 3 words, DE merges two into one.
+  // matchLayersToLines handles this with tail-anchoring logic.
   const transLines = parseRawPhrase(transPhrase, "linesArray");
+  console.log(`${transLines} `);
 
-  // Map layer.id → internal SO document ID for O(1) lookup in the loop.
-  // Uses pre-save allInfos passed from translateAll so IDs are stable across folders.
-  // Falls back to a fresh batchPlay fetch if called standalone (e.g. from generateSuggestions).
-  const childSOLayers = [...folderLayer.layers].filter(l => l.kind === constants.LayerKind.SMARTOBJECT);
+  // STEP 4: Collect all Smart Object layers inside this folder (recursive).
+  // We need their SmartObjectMoreIDs to detect duplicate instances.
+  // (Text layers and other types are handled later without needing SO IDs.)
+  let childSOLayers = ps.getAllLayers(folderLayer.layers).filter(layer => layer.kind === constants.LayerKind.SMARTOBJECT);
+  const uniqueChildSOLayers = await ps.purgeSOInstancesFromArray(childSOLayers);
+  childSOLayers = uniqueChildSOLayers;
+  
+  // STEP 5: Fetch the full Photoshop descriptor for each child SO in one bulk batchPlay call.
+  // From each descriptor we extract smartObjectMore.ID — the SmartObjectMoreID that is
+  // shared across all instances/copies of the same linked Smart Object.
+  // We store it in soIdMap: layer.id → SmartObjectMoreID, for O(1) lookup during translation.
   const soIdMap = new Map();
-  if (allInfos && layerIndexMap) {
-    childSOLayers.forEach(l => {
-      const internalId = allInfos[layerIndexMap.get(l.id)]?.smartObjectMore?.ID;
-      if (internalId) soIdMap.set(l.id, internalId);
-    });
-  } else {
-    const childSOInfos = await batchPlay(
-      childSOLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
-      { synchronousExecution: true }
-    );
-    childSOLayers.forEach((l, i) => {
-      const internalId = childSOInfos[i]?.smartObjectMore?.ID;
-      if (internalId) soIdMap.set(l.id, internalId);
-    });
+  for (const layer of childSOLayers) {
+    const smartObjectMoreID = await ps.getSOid(layer);
+    if (smartObjectMoreID) soIdMap.set(layer.id, smartObjectMoreID);
   }
-  // console.log("soIdMap:", JSON.stringify([...soIdMap.entries()]));
 
-  const childLayers = [...folderLayer.layers].map((layer, i) => ({
-    id:         layer.id,
-    name:       layer.name,
-    stackIndex: i,
-    layer,
-  }));
+  // STEP 6: Build a flat list of translatable child layers (Smart Objects and Text only), recursive.
+  // Shape layers, fills, masks and other non-translatable types are excluded here so they
+  // can't inflate resolved.length, corrupt the offset calculation, or cause middle-gap mismatches.
+  const childLayers = ps.getAllLayers(folderLayer.layers)
+    .filter(layer => layer.kind === constants.LayerKind.SMARTOBJECT || layer.kind === constants.LayerKind.TEXT)
+    .map((layer, i) => ({
+      id:         layer.id,
+      name:       layer.name,
+      stackIndex: i,
+      layer,
+    }));
 
+  // STEP 7: Match each child layer to a translated line.
+  // Uses a confidence ladder: exact name match → fuzzy name match → stack index fallback.
+  // Returns a Map<layerId, { text, matchType } | null>
+  // null means the layer was in a "middle gap" and should be left untouched.
+  // If overall confidence is too low (too many layers fell to stack index), the whole folder is skipped.
   const { skipped, reason, confidence, result } = matchLayersToLines(
     childLayers,
     enLines,
@@ -210,37 +379,136 @@ export async function processMatchedFolder(folderLayer, appState, translatedSOId
     return;
   }
 
+  // STEP 8: Apply translations.
+  // Loop over the match result and translate each assigned layer.
   for (const [layerId, assignment] of result) {
+    // null assignment = middle-gap layer, intentionally left untouched
     if (assignment === null) continue;
 
     const { text, matchType } = assignment;
     const child = childLayers.find(c => c.id === layerId);
+    // Skip invisible layers — they may be alternate states not meant to be translated now
     if (!child || !child.layer.visible) continue;
 
     if (child.layer.kind === constants.LayerKind.SMARTOBJECT) {
-      const internalSOId = soIdMap.get(child.id);
+      const smartObjectID = soIdMap.get(child.id);
 
-
-      console.log(`translatedSOIds has ${internalSOId}:`, translatedSOIds.has(internalSOId));
-
-
-      // Skip if this SO's internal document was already translated by another instance
-      if (internalSOId && translatedSOIds.has(internalSOId)) {
-        console.log(`["${child.layer.name}", "with internal SO ID: ${child.layer.id}" is instance and is skipped`);
+      // DEDUPLICATION: If this SO's internal document was already translated (by an earlier
+      // instance of the same SO encountered in a previous folder or earlier in this folder),
+      // skip it — translating any one instance updates all of them simultaneously.
+      if (smartObjectID && processedIds.has(smartObjectID)) {
+        console.log(`["${child.layer.name}", "with SmartObjectMoreID: ${smartObjectID}" is instance and is skipped`);
         continue;
       }
 
       console.log(`[${matchType}] "${child.layer.name}" → "${text}"`);
       await ps.translateSmartObject(child.layer, text);
+      processedIds.add(await ps.getSOid(child.layer)); // Mark this SO as processed to prevent duplicate translations of its instances
 
-      // Mark this internal SO document as done
-      if (internalSOId) translatedSOIds.add(internalSOId);
+
+      // // DIAGNOSTIC: check if SmartObjectMoreID changed after translation
+      // const smartObjectMoreIDAfter = await ps.getSOid(child.layer);
+      // if (smartObjectMoreIDAfter !== smartObjectID) {
+      //   console.warn(`[processMatchedFolder] ID CHANGED after translation! "${child.layer.name}": before=${smartObjectID} after=${smartObjectMoreIDAfter}`);
+      // } else {
+      //   console.log(`[processMatchedFolder] ID stable after translation: "${child.layer.name}" ID=${smartObjectID}`);
+      // }
+
+      // Mark this SO document as done so all future instances are skipped
+      if (smartObjectID) processedIds.add(smartObjectID);
+      // console.log(`[processMatchedFolder] processedIds after adding:`, [...processedIds]);
 
     } else if (child.layer.kind === constants.LayerKind.TEXT) {
       console.log(`Text layer — not yet implemented: "${child.layer.name}" → "${text}"`);
     }
   }
 }
+
+
+// !!!!!!!!! Safe function - do not modify or delete !!!!!!!!!
+
+// export async function processMatchedFolder(folderLayer, appState, translatedSOIds = new Set(), allInfos = null, layerIndexMap = null) {
+
+//   // folderLayer.name IS the EN phrase — no need to look it up again
+//   const enLines    = parseRawPhrase(folderLayer.name, "linesArray");
+
+//   // Only need to look up the translation
+//   const transPhrase = extractMatchingPhrase(folderLayer, appState);
+//   if (!transPhrase) return;
+
+//   const transLines = parseRawPhrase(transPhrase, "linesArray");
+
+//   // Map layer.id → SmartObjectMoreID for O(1) lookup in the loop.
+//   // Uses pre-save allInfos passed from translateAll so IDs are stable across folders.
+//   // Falls back to a fresh batchPlay fetch if called standalone (e.g. from generateSuggestions).
+//   const childSOLayers = [...folderLayer.layers].filter(l => l.kind === constants.LayerKind.SMARTOBJECT);
+//   const soIdMap = new Map();
+//   if (allInfos && layerIndexMap) {
+//     childSOLayers.forEach(l => {
+//       const internalId = allInfos[layerIndexMap.get(l.id)]?.smartObjectMore?.ID;
+//       if (internalId) soIdMap.set(l.id, internalId);
+//     });
+//   } else {
+//     const childSOInfos = await batchPlay(
+//       childSOLayers.map(l => ({ _obj: "get", _target: [{ _ref: "layer", _id: l.id }] })),
+//       { synchronousExecution: true }
+//     );
+//     childSOLayers.forEach((l, i) => {
+//       const internalId = childSOInfos[i]?.smartObjectMore?.ID;
+//       if (internalId) soIdMap.set(l.id, internalId);
+//     });
+//   }
+//   // console.log("soIdMap:", JSON.stringify([...soIdMap.entries()]));
+
+//   const childLayers = [...folderLayer.layers].map((layer, i) => ({
+//     id:         layer.id,
+//     name:       layer.name,
+//     stackIndex: i,
+//     layer,
+//   }));
+
+//   const { skipped, reason, confidence, result } = matchLayersToLines(
+//     childLayers,
+//     enLines,
+//     transLines
+//   );
+
+//   if (skipped) {
+//     console.log(`Skipped "${folderLayer.name}" — ${reason} (confidence: ${confidence})`);
+//     return;
+//   }
+
+//   for (const [layerId, assignment] of result) {
+//     if (assignment === null) continue;
+
+//     const { text, matchType } = assignment;
+//     const child = childLayers.find(c => c.id === layerId);
+//     if (!child || !child.layer.visible) continue;
+
+//     if (child.layer.kind === constants.LayerKind.SMARTOBJECT) {
+//       const internalSOId = soIdMap.get(child.id);
+
+
+//       console.log(`translatedSOIds has ${internalSOId}:`, translatedSOIds.has(internalSOId));
+
+
+//       // Skip if this SO's internal document was already translated by another instance
+//       if (internalSOId && translatedSOIds.has(internalSOId)) {
+//         console.log(`["${child.layer.name}", "with internal SO ID: ${child.layer.id}" is instance and is skipped`);
+//         continue;
+//       }
+
+//       console.log(`[${matchType}] "${child.layer.name}" → "${text}"`);
+//       await ps.translateSmartObject(child.layer, text);
+
+//       // Mark this internal SO document as done
+//       if (internalSOId) translatedSOIds.add(internalSOId);
+
+//     } else if (child.layer.kind === constants.LayerKind.TEXT) {
+//       console.log(`Text layer — not yet implemented: "${child.layer.name}" → "${text}"`);
+//     }
+//   }
+// }
 
 
 
@@ -453,32 +721,25 @@ function matchLayersToLines(childLayers, enLines, transLines) {
  */
 export function parseRawPhrase(phrase, mode = "oneLiner") {
 
-  // strip (…) annotations in ALL modes
-  const cleaned = phrase.replace(/\(.*?\)/g, "").replace(/\s+\n/g, "\n").trim();
-
-  // raw — return with \n intact, [] preserved, just (…) stripped
-  if (mode === "raw") return cleaned;
-
-  // strip […] placeholders and split into lines
-  const lines = cleaned
-    .split("\n")
-    .map(l => l.trim().replace(/\[.*?\]/g, "").trim())
-    .filter(Boolean);
-
-  // oneLiner — all lines collapsed into one space-separated string
-  if (mode === "oneLiner") return lines.join(" ").replace(/\s+/g, " ").trim();
-
-  // withLines — individual words from all lines, one per entry
-  if (mode === "linesArray") return lines.flatMap(l => l.split(/\s+/)).filter(Boolean);
-
-  // test — remove entire line if it contains [...], keep rest as oneLiner
+  // strict: remove entire lines that contain [...] before any other processing
+  let input = phrase;
   if (mode === "strict") {
-    const strictLines = cleaned
-      .split("\n")
-      .map(l => l.trim())
-      .filter(l => l && !/\[.*?\]/.test(l));
-    return strictLines.join(" ").replace(/\s+/g, " ").trim();
+    input = phrase.split("\n").filter(l => !/\[.*?\]/.test(l)).join("\n");
   }
+
+  // Remove () brackets but keep their content: (SUPER) → SUPER
+  // Remove [] tokens entirely: [Number] → ""
+  const withParens = input.replace(/\(([^)]*)\)/g, "$1");
+  const withSquare = withParens.replace(/\[.*?\]/g, "");
+  const cleaned = withSquare.replace(/\s+\n/g, "\n").trim();
+
+  // Trim each line, collapse internal spaces, drop empty lines
+  const lines = cleaned.split("\n").map(l => l.trim().replace(/\s+/g, " ")).filter(Boolean);
+
+  if (mode === "raw")        return lines.join("\n");
+  if (mode === "oneLiner")   return lines.join(" ").replace(/\s+/g, " ").trim();
+  if (mode === "linesArray") return lines.flatMap(l => l.split(/\s+/)).filter(Boolean);
+  if (mode === "strict")     return lines.join(" ").replace(/\s+/g, " ").trim();
 
   throw new Error(`parseRawPhrase: unknown mode "${mode}"`);
 }

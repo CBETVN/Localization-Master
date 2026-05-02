@@ -26,14 +26,21 @@ const { constants } = photoshop;
 export function guessThePhrase(layer, appState) {
   const enEntries   = appState.languageData?.["EN"];
   const langEntries = appState.languageData?.[appState.selectedLanguage];
-  if (!enEntries || !langEntries) return null;
+  if (!enEntries || !langEntries){
+    console.log("guessThePhrase: missing language data for EN or selected language");
+    return null;
+
+  } 
 
   // Pre-normalise all EN phrases — used for container-finding, filtering and scoring
   const normalizedEN = enEntries.map(e => _normalizeForMatch(e));
 
-  const candidates = _buildPhraseCandidates(layer, normalizedEN);
-  // console.log("Phrase guesser candidates:", candidates);
-  if (candidates.length === 0) return null;
+  const { candidates, container } = _buildPhraseCandidates(layer, normalizedEN);
+  console.log(`[guessThePhrase] "${layer.name}" candidates:`, candidates);
+  if (candidates.length === 0) {
+    console.warn(`[guessThePhrase] "${layer.name}" — no candidates built, returning null`);
+    return null;
+  }
 
   let bestScore = 0, bestShared = 0, bestIndex = -1, bestCandidate = null;
 
@@ -50,16 +57,23 @@ export function guessThePhrase(layer, appState) {
     }
   }
 
-  if (bestScore < 0.5 || bestIndex === -1) return null;
+  if (bestScore < 0.5 || bestIndex === -1) {
+    console.warn(`[guessThePhrase] "${layer.name}" — best score ${bestScore.toFixed(2)} below 0.5, no match found`);
+    return null;
+  }
 
   const translatedPhrase = parseRawPhrase(langEntries[bestIndex], "strict");
-  if (!translatedPhrase) return null;
+  if (!translatedPhrase) {
+    console.warn(`[guessThePhrase] "${layer.name}" — matched EN phrase "${enEntries[bestIndex]}" but translatedPhrase is empty after parseRawPhrase("strict")`);
+    return null;
+  }
 
   return {
     enPhrase:         enEntries[bestIndex],
     translatedPhrase,
     confidence:       bestScore,
     matchedCandidate: bestCandidate,
+    container,
   };
 }
 
@@ -171,7 +185,7 @@ function _findPhraseContainer(layer, normalizedEN) {
   let seedPhraseIndex  = -1;   // phrase index first matched while climbing
   let lastGoodAncestor = null; // last ancestor still matching the seed phrase
 
-  while (current && current.parent) { // stop before document root (no parent)
+  while (current) { // climb until past the document root
     const vocabNames = _collectVocabNames(current, normalizedEN);
 
     if (vocabNames.length > 0) {
@@ -205,7 +219,7 @@ function _findPhraseContainer(layer, normalizedEN) {
         // upgrades to "TOTAL CREDITS WON", all words still explained → keep climbing).
         seedPhraseIndex  = bestIndex;
         lastGoodAncestor = current;
-        console.log("phraseContainer advance:", current.name, "→ phrase index", bestIndex, "score", bestScore);
+        console.log("English phrase is :", current.name, "→ phrase index", bestIndex, "score", bestScore);
 
       } else if (seedPhraseIndex !== -1) {
         // Stop rule 2: score dropped below 0.5 after seeding
@@ -315,5 +329,5 @@ function _buildPhraseCandidates(layer, normalizedEN) {
     }
   }
   // console.log("Layer candidates:", candidates);
-  return candidates;
+  return { candidates, container };
 }
