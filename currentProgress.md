@@ -80,19 +80,23 @@ Diagnostic logs were added to both `photoshop.js` and `parsingLogic.js` to confi
 
 ---
 
-## Known bug — "command unavailable" for locked Smart Objects ⚠️ TODO
-**Symptom:** When `translateSmartObject` is called on a layer that has `locked: true`, the `editSmartObject` batchPlay call fails silently — Photoshop does not open the embedded PSB. The active document stays the same (main PSD). The `mainDocId` guard catches this and returns early, but the `editSmartObject` attempt itself still triggers an internal "command not available" error in Photoshop.
+## "command unavailable" for locked Smart Objects ✅ FIXED
 
-**Example:** `SUPER (DO NOT TRANSLATE)` layer ID 3229 inside `buyBonusBtnActive0Portrait - EXPORT 50%` — confirmed `locked: true` in console logs.
+**Symptom:** When `translateSmartObject` was called on a layer with `locked: true`, the `editSmartObject` batchPlay call (`placedLayerEditContents`) failed silently — Photoshop did not open the embedded PSB and left the active document unchanged. The existing `mainDocId` guard caught this and returned early, but the `editSmartObject` attempt itself still triggered an internal "command not available" error in Photoshop.
 
-**Fix needed:** Add an early return in `translateSmartObject` (in `photoshop.js`) before calling `editSmartObject`, when `freshSmartObject.locked === true`:
+**Confirmed via diagnostic logs:** `SUPER (DO NOT TRANSLATE)` layer ID 3229 inside `buyBonusBtnActive0Portrait - EXPORT 50%` logged `locked: true`, followed by the FAILED guard firing.
+
+**Fix applied:** Added a preflight locked-layer check in `translateSmartObject` (`photoshop.js`), immediately after the `freshSmartObject` null guard and before `editSmartObject` is ever called:
+
 ```js
 if (freshSmartObject.locked) {
-  console.warn(`[translateSmartObject] Skipping "${freshSmartObject.name}" — layer is locked`);
+  // Known Photoshop behavior: editing a locked SO triggers "command unavailable".
+  // Skip early to keep the run stable and avoid modal failure.
   return;
 }
 ```
-This prevents the failed batchPlay call entirely.
+
+This prevents the failed batchPlay call entirely. The layer is silently skipped and the translation run continues with the next SO. No changes to the matching logic, dedup, or modal flow.
 
 ---
 
