@@ -47,6 +47,13 @@ export async function translateSmartObject(smartObject, translation) {
         return;
       }
 
+      if (freshSmartObject.locked) {
+        // Known Photoshop behavior: editing a locked SO triggers "command unavailable".
+        // Skip early to keep the run stable and avoid modal failure.
+        console.warn(`Smart Object "${freshSmartObject.name}" is locked. Cannot edit contents. Skipping translation.`);
+        return;
+      }
+
       // DELETE LATER
       // console.log(`[translateSmartObject] About to open SO "${freshSmartObject.name}" | kind: ${freshSmartObject.kind} | locked: ${freshSmartObject.locked} | visible: ${freshSmartObject.visible}`);
       // let anc = freshSmartObject.parent;
