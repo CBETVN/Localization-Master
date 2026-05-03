@@ -680,7 +680,19 @@ function matchLayersToLines(childLayers, enLines, transLines) {
   // only the first gets the translation — the rest are left untouched (null).
   const assignedEnIndices = new Set();
 
+  // --- TEST ONLY: hardcoded skip list — layers whose name matches are left untouched ---
+  const doNotTranslate = new Set(["SUPER", "X2",]);
+
   resolved.forEach(({ layer, matchType, enIndex }) => {
+
+    // TEST: skip layers in the doNotTranslate list — leave untouched, but advance the
+    // position counter so subsequent layers don't get shifted into the wrong trans slot.
+    // e.g. X2 skipped at enIndex=0 → CHANCE must still get transLines[1], not transLines[0].
+    if (doNotTranslate.has(layer.name.trim().toUpperCase())) {
+      result.set(layer.id, null);
+      assignedEnIndices.add(enIndex);
+      return;
+    }
 
     // Duplicate — this EN line was already assigned by a previous layer → leave untouched
     if (assignedEnIndices.has(enIndex)) {
