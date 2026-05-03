@@ -376,8 +376,12 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
   // STEP 6: Apply translations.
   // Loop over the match result and translate each assigned layer.
   for (const [layerId, assignment] of result) {
-    // null assignment = middle-gap layer, intentionally left untouched
-    if (assignment === null) continue;
+    // null assignment = middle-gap layer or word-in-line duplicate, intentionally left untouched
+    if (assignment === null) {
+      const child = childLayers.find(child => child.id === layerId);
+      if (child) console.log(`[skipped SO] "${child.layer.name}" → untouched (no translation assigned)`);
+      continue;
+    }
 
     const { text, matchType } = assignment;
     const child = childLayers.find(child => child.id === layerId);
@@ -390,8 +394,7 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
       // instance of the same SO encountered in a previous folder or earlier in this folder),
       // skip it — translating any one instance updates all of them simultaneously.
       if (smartObjectID && processedIds.has(smartObjectID)) {
-        // DELETE LATER
-        // console.log(`["${child.layer.name}", "with SmartObjectMoreID: ${smartObjectID}" is instance and is skipped`);
+        console.log(`[skipped SO] "${child.layer.name}" → already translated (same SO in earlier folder)`);
         continue;
       }
 
@@ -602,16 +605,22 @@ export async function generateSuggestions(layer, appState) {
 function matchLayersToLines(childLayers, enLines, transLines) {
   const result = new Map();
 
-  // Build normalized EN word → index lookup
-  // e.g. "TOTAL" → 0, "CREDITS" → 1, "WON" → 2
+  // Build exact EN line → index lookup (uppercase)
+  // e.g. "CONGRATULATIONS" → 0, "YOU WIN" → 1, "FREE SPINS" → 2
   const enIndexByName = new Map(
-    enLines.map((word, i) => [word.trim().toUpperCase(), i])
+    enLines.map((line, i) => [line.trim().toUpperCase(), i])
   );
 
-  // Resolve each layer to an EN index using confidence ladder:
-  //   1. Exact name match   → layer name matches EN word exactly
-  //   2. Fuzzy name match   → layer name starts with EN word ("CREDITS copy 2")
-  //   3. Stack index        → last resort, risky if layers were reordered
+  // Resolve each layer to an EN line index using confidence ladder:
+  //   1. Exact name match   → layer name equals an EN line exactly
+  //                           e.g. "YOU WIN" matches line "YOU WIN" at index 1
+  //   2. Fuzzy name match   → layer name starts with an EN line
+  //                           e.g. "CREDITS copy 2" starts with "CREDITS"
+  //   3. Word-in-line match → layer name is one word within a multi-word EN line
+  //                           e.g. "FREE" is a word in "FREE SPINS" at index 2
+  //                           When the PSD splits one phrase line into multiple SOs,
+  //                           only the first matched layer gets translated — the rest are null.
+  //   4. Stack index        → last resort, risky if layers were reordered
   const resolved = childLayers.map((layer) => {
     const normalizedName = layer.name.trim().toUpperCase();
 
@@ -620,15 +629,24 @@ function matchLayersToLines(childLayers, enLines, transLines) {
       return { layer, enIndex: enIndexByName.get(normalizedName), matchType: "name" };
     }
 
-    // 2. Fuzzy — layer name starts with an EN word ("CREDITS copy 2" → "CREDITS")
-    const fuzzyIndex = enLines.findIndex((word) =>
-      normalizedName.startsWith(word.trim().toUpperCase())
+    // 2. Fuzzy — layer name starts with an EN line ("CREDITS copy 2" → "CREDITS")
+    const fuzzyIndex = enLines.findIndex((line) =>
+      normalizedName.startsWith(line.trim().toUpperCase())
     );
     if (fuzzyIndex !== -1) {
       return { layer, enIndex: fuzzyIndex, matchType: "fuzzy" };
     }
 
-    // 3. Stack index — last resort
+    // 3. Word-in-line — layer name is a word within a multi-word EN line
+    // e.g. "FREE" is a word within "FREE SPINS" → enIndex 2
+    const wordInLineIndex = enLines.findIndex((line) =>
+      line.split(/\s+/).includes(normalizedName)
+    );
+    if (wordInLineIndex !== -1) {
+      return { layer, enIndex: wordInLineIndex, matchType: "wordInLine" };
+    }
+
+    // 4. Stack index — last resort
     return { layer, enIndex: layer.stackIndex, matchType: "stackIndex" };
   });
 
@@ -637,7 +655,7 @@ function matchLayersToLines(childLayers, enLines, transLines) {
   resolved.sort((a, b) => a.enIndex - b.enIndex);
 
   // Confidence guard — skip folder if too many layers are unrecognizable
-  // confidence 1.0 = all matched by name/fuzzy
+  // confidence 1.0 = all matched by name/fuzzy/wordInLine
   // confidence 0.0 = all fell through to stackIndex → skip
   const stackIndexCount = resolved.filter((r) => r.matchType === "stackIndex").length;
   const confidence = 1 - stackIndexCount / resolved.length;
@@ -651,38 +669,52 @@ function matchLayersToLines(childLayers, enLines, transLines) {
     };
   }
 
-  // offset = how many EN lines collapsed into fewer translated lines
-  // e.g. EN has 3 lines, DE has 2 → offset = 1 (one word was merged)
-  const offset = resolved.length - transLines.length;
+  // Branch based on unique EN line count vs translated line count.
+  // Using enLines.length (not resolved.length) so word-in-line duplicates don't skew the offset.
+  // e.g. EN: 3 lines, trans: 3 lines → direct 1:1 even if 4 layers exist (one is a duplicate word)
+  const uniqueEnLinesCount = enLines.length;
+  const offset = uniqueEnLinesCount - transLines.length;
 
-  resolved.forEach(({ layer, matchType, enIndex }, i) => {
+  // Track which EN line indices have already been assigned a translation.
+  // When multiple PSD layers match the same EN line ("FREE" and "SPINS" both → "FREE SPINS"),
+  // only the first gets the translation — the rest are left untouched (null).
+  const assignedEnIndices = new Set();
 
-    // Case A — trans has more lines than layers
-    // Translator split a word into more lines than there are layers.
-    // Absorb overflow into the last layer by joining remaining lines with a space.
-    // e.g. EN: ["YOU", "WIN"] / BG: ["ти", "вече", "спечели"]
-    //   YOU → "ти"
-    //   WIN → "вече спечели"
-    if (resolved.length <= transLines.length) {
-      const isLast = i === resolved.length - 1;
-      const text = isLast ? transLines.slice(i).join(" ") : transLines[i];
-      result.set(layer.id, { text, matchType, enIndex });
+  resolved.forEach(({ layer, matchType, enIndex }) => {
+
+    // Duplicate — this EN line was already assigned by a previous layer → leave untouched
+    if (assignedEnIndices.has(enIndex)) {
+      result.set(layer.id, null);
       return;
     }
 
-    // Case B — EN has more lines than trans, true tail-anchoring
-    // First maps to first, last maps to last, middle gap is untouched.
-    // e.g. EN: ["TOTAL", "CREDITS", "WON"] / DE: ["GESAMTGUTHABEN", "GEWONNEN"]
-    //   TOTAL   → "GESAMTGUTHABEN"
-    //   CREDITS → null (middle gap, untouched)
-    //   WON     → "GEWONNEN"
-    if (i === 0) {
-      result.set(layer.id, { text: transLines[0], matchType, enIndex });
-    } else if (i <= offset) {
-      result.set(layer.id, null); // middle gap, untouched
+    // 0-based position of this EN line among the unique ones assigned so far
+    const uniquePosition = assignedEnIndices.size;
+
+    if (uniqueEnLinesCount <= transLines.length) {
+      // Case A — translator expanded the phrase into more lines than EN has.
+      // Last unique EN line absorbs all remaining trans lines joined with a space.
+      // e.g. EN: ["YOU WIN"] / BG: ["ти", "вече", "спечели"] → "ти вече спечели"
+      const isLast = uniquePosition === uniqueEnLinesCount - 1;
+      const text = isLast ? transLines.slice(uniquePosition).join(" ") : transLines[uniquePosition];
+      result.set(layer.id, { text, matchType, enIndex });
     } else {
-      result.set(layer.id, { text: transLines[i - offset], matchType, enIndex });
+      // Case B — EN has more lines than trans, true tail-anchoring.
+      // First maps to first, last maps to last, middle gap is untouched.
+      // e.g. EN: ["TOTAL", "CREDITS", "WON"] / DE: ["GESAMTGUTHABEN", "GEWONNEN"]
+      //   TOTAL   → "GESAMTGUTHABEN"
+      //   CREDITS → null (middle gap, untouched)
+      //   WON     → "GEWONNEN"
+      if (uniquePosition === 0) {
+        result.set(layer.id, { text: transLines[0], matchType, enIndex });
+      } else if (uniquePosition <= offset) {
+        result.set(layer.id, null); // middle gap, untouched
+      } else {
+        result.set(layer.id, { text: transLines[uniquePosition - offset], matchType, enIndex });
+      }
     }
+
+    assignedEnIndices.add(enIndex);
   });
 
   return { skipped: false, confidence, result };
@@ -705,34 +737,59 @@ function matchLayersToLines(childLayers, enLines, transLines) {
 
 
 /**
- * Parses a raw phrase string into different representations based on the requested mode.
- * Strips (…) annotations in all modes.
+ * Parses a raw phrase string from the Excel table into a usable representation.
+ * In all modes: strips () annotation brackets (keeps content), strips [] placeholders entirely,
+ * trims whitespace per line, collapses multi-spaces, and drops empty lines.
+ *
  * Modes:
- *   "raw"      — returns phrase with \n intact and [] preserved, only (…) stripped
- *   "oneLiner" — collapses all lines into one space-separated string, [] content stripped
- *   "withLines"— returns array of individual words across all lines, [] content stripped
- *   "strict"   — same as oneLiner but drops entire lines that contain [...] placeholders
+ *
+ *   "raw"        — Returns the cleaned phrase with \n line breaks preserved.
+ *                  Use when you need the full phrase structure intact (e.g. to pass into
+ *                  getTranslatableLayers which splits by \n to build expected layer names).
+ *                  Input:  "(X2)\nFOR BONUS\n[Number]"
+ *                  Output: "X2\nFOR BONUS"
+ *
+ *   "oneLiner"   — Collapses all lines into one space-separated string.
+ *                  Use for folder-name matching (guessThePhrase / isNameENPhrase) where
+ *                  the full phrase needs to be compared as a single string.
+ *                  Input:  "FREE\nSPINS\nYOU WIN"
+ *                  Output: "FREE SPINS YOU WIN"
+ *
+ *   "linesArray" — Returns an array of lines, one entry per \n-delimited line.
+ *                  Each line may contain spaces — "FOR BONUS" stays as one entry.
+ *                  Use in processMatchedFolder to build enLines / transLines for
+ *                  matchLayersToLines, where each line maps to exactly one SO layer.
+ *                  Input:  "CONGRATULATIONS\nYOU WIN\nFREE SPINS"
+ *                  Output: ["CONGRATULATIONS", "YOU WIN", "FREE SPINS"]
+ *
+ *   "strict"     — Same as "oneLiner" but entire lines containing [...] are dropped first.
+ *                  Use when building a translated phrase string and placeholder lines like
+ *                  "[Number]" or "[Multiplier]" must not appear in the output.
+ *                  Input:  "GEWINNEN\nSIE\n[Number] FREISPIELE"
+ *                  Output: "GEWINNEN SIE"
  */
 export function parseRawPhrase(phrase, mode = "oneLiner") {
 
-  // strict: remove entire lines that contain [...] before any other processing
+  // "strict" drops entire lines that are [...] placeholders before any other processing.
+  // e.g. "GEWINNEN\n[Number] FREISPIELE" → "GEWINNEN"
   let input = phrase;
   if (mode === "strict") {
     input = phrase.split("\n").filter(l => !/\[.*?\]/.test(l)).join("\n");
   }
 
-  // Remove () brackets but keep their content: (SUPER) → SUPER
-  // Remove [] tokens entirely: [Number] → ""
+  // Strip () brackets but keep their content: (SUPER) → SUPER
+  // Strip [] placeholders entirely: [Number] → ""
   const withParens = input.replace(/\(([^)]*)\)/g, "$1");
   const withSquare = withParens.replace(/\[.*?\]/g, "");
   const cleaned = withSquare.replace(/\s+\n/g, "\n").trim();
 
-  // Trim each line, collapse internal spaces, drop empty lines
+  // Trim each line, collapse internal spaces, drop empty lines.
+  // Result is an array of clean lines, e.g. ["FOR BONUS", "ACTIVE"]
   const lines = cleaned.split("\n").map(l => l.trim().replace(/\s+/g, " ")).filter(Boolean);
 
   if (mode === "raw")        return lines.join("\n");
   if (mode === "oneLiner")   return lines.join(" ").replace(/\s+/g, " ").trim();
-  if (mode === "linesArray") return lines.flatMap(l => l.split(/\s+/)).filter(Boolean);
+  if (mode === "linesArray") return lines; // one entry per \n-line — "FOR BONUS" stays intact as one entry
   if (mode === "strict")     return lines.join(" ").replace(/\s+/g, " ").trim();
 
   throw new Error(`parseRawPhrase: unknown mode "${mode}"`);

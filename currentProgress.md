@@ -172,22 +172,53 @@ Matches child layers to translated lines using: exact name → fuzzy name → st
 
 ---
 
-## `processMatchedFolder` called multiple times for the same folder ⚠️ TODO
+## Session — May 3 2026
 
-**Problem:** `translateAll` loops over `smartObjectsForProcessing` — one entry per unique SO. Multiple SOs can share the same container folder (e.g. `x2`, `CHANCE`, `FOR BONUS`, `ACTIVE`, `ON` all live inside `"ON\nACTIVE\nCHANCE\nFOR BONUS\nx2"`). For each of those 5 SOs, `guessThePhrase` returns the same container → `processMatchedFolder` is called 5 times on the same folder.
+### Pipeline is working end-to-end ✅
 
-`processedIds` prevents double-translating individual SOs within repeat calls, but `getTranslatableLayers` and `matchLayersToLines` still run redundantly on every repeat call, and the repeat calls produce noisy logs.
+Full translation run now completes correctly for the test PSD. Core pipeline:
+- `translateAll` → `guessThePhrase` → `processMatchedFolder` → `getTranslatableLayers` → `matchLayersToLines` → `translateSmartObject`
 
-**Proposed fix:** Pass `processedIds` into `getTranslatableLayers` so it acts as the single gate. When all SOs in a folder are already in `processedIds`, `getTranslatableLayers` returns 0 layers → `processMatchedFolder` returns early after the first real call.
+**What was fixed this session:**
 
-**Signature change:**
-```js
-export async function getTranslatableLayers(folderLayer, processedIds, appState)
+**`parseRawPhrase("linesArray")` was splitting by spaces, not just newlines** ✅ FIXED
+`"FREE\nSPINS\nYOU WIN"` → was producing `["FREE","SPINS","YOU","WIN"]`. Fixed to return the newline-split array directly: `["FREE","SPINS","YOU WIN"]`. Each entry now maps to exactly one SO layer.
+
+**`phraseGuesser` was flattening the translated phrase to a single string** ✅ FIXED
+`guessThePhrase` was calling `parseRawPhrase(langEntries[bestIndex], "strict")` which collapsed the DE phrase `"HERZLICHEN GLÜCKWUNSCH\nSIE GEWINNEN\nFREISPIELE"` into `"HERZLICHEN GLÜCKWUNSCH SIE GEWINNEN FREISPIELE"` — a flat string with no newline structure. Changed to `"raw"` mode so newlines are preserved. `processMatchedFolder` can now correctly split it into one entry per SO.
+
+**`getTranslatableLayers` phrase-line filter only did exact match** ✅ FIXED
+When the Excel phrase has `"FREE SPINS"` as one line but the PSD has two separate SOs named `"FREE"` and `"SPINS"`, neither passed the exact filter. Added word-in-line matching: a layer name passes if it equals any phrase line OR is one word within a multi-word phrase line.
+
+**`matchLayersToLines` — word-in-line duplicate handling** ✅ FIXED
+When two PSD layers (`"FREE"` and `"SPINS"`) both resolve to the same EN line index (`"FREE SPINS"` at index 2), the first gets the translation and the second gets `null` (untouched). Added `assignedEnIndices` Set to track this. Branching is now based on `enLines.length` vs `transLines.length` (not `resolved.length`) so word-in-line duplicates don't skew the offset.
+
+**Skip logs added** ✅ DONE
+Every SO now logs its outcome:
+- `[translated SO] "FREE" → "FREISPIELE"` — actually translated
+- `[skipped SO] "SPINS" → untouched (no translation assigned)` — word-in-line duplicate
+- `[skipped SO] "x2" → already translated (same SO in earlier folder)` — processedIds dedup
+
+---
+
+## Known bugs
+
+### BUG — `ACTIVE` translated to wrong line when a phrase line is missing from the PSD folder
+
+**Symptom from logs:**
+```
+folder "EN" → expected SO names from phrase: [X2, CHANCE, FOR BONUS, ACTIVE] → matched 3 SO(s): ["FOR BONUS", "CHANCE", "ACTIVE"]
+[translated SO] "ACTIVE" → "AUF DEN BONUS"   ← wrong, should be "AKTIV"
 ```
 
-Inside the SO dedup loop, add:
-```js
-if (processedIds && processedIds.has(soId)) continue; // already translated in a prior folder call
-```
+**Root cause:** The PSD folder is missing the `x2` layer. `getTranslatableLayers` returns 3 layers with EN indices 1, 2, 3 (CHANCE=1, FOR BONUS=2, ACTIVE=3). `uniquePosition` counts 0, 1, 2 — but `transLines[0]` = "X2", `transLines[1]` = "CHANCE", `transLines[2]` = "AUF DEN BONUS", `transLines[3]` = "AKTIV". ACTIVE is at `uniquePosition=2` which maps to `transLines[2]` = "AUF DEN BONUS" instead of `transLines[3]` = "AKTIV".
 
-This makes `getTranslatableLayers` the single source of truth for ALL dedup — within-folder, cross-folder, and repeat-folder — and eliminates the redundant processing entirely.
+**Fix needed:** When `enLines.length === transLines.length`, use `enIndex` directly as the `transLines` index instead of `uniquePosition`. This way ACTIVE at `enIndex=3` → `transLines[3]` = "AKTIV" correctly, regardless of how many other phrase lines are missing from the PSD.
+
+---
+
+### BUG — `processMatchedFolder` called N times for same folder ⚠️ TODO
+
+**Problem:** `translateAll` loops over `smartObjectsForProcessing` — one entry per unique SO. Multiple SOs can share the same container folder (e.g. `x2`, `CHANCE`, `FOR BONUS`, `ACTIVE`, `ON` all live inside the same folder). For each of those SOs, `guessThePhrase` returns the same container → `processMatchedFolder` is called once per SO. `processedIds` prevents double-translating but `getTranslatableLayers` and `matchLayersToLines` still run redundantly, and the logs are noisy.
+
+**Proposed fix:** Pass `processedIds` into `getTranslatableLayers`. When all SOs in the folder are already in `processedIds`, it returns 0 layers → `processMatchedFolder` exits early after the first real call.

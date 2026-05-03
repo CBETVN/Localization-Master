@@ -94,10 +94,17 @@ export async function getTranslatableLayers(folderLayer, enPhrase) {
         soIdMap.set(layer.id, soId);
       }
     }
-    // Phrase line filter — layer name must match one of the lines from the EN phrase.
-    // e.g. "FOR BONUS" passes because it is a line; "Base" fails because it is not.
+    // Phrase line filter — layer name must match an EN phrase line, either exactly
+    // or as one word within a multi-word line.
+    // e.g. "FOR BONUS" passes (exact). "FREE" passes (word within "FREE SPINS"). "Base" fails.
     // Skip this check when enPhrase was not provided.
-    if (enPhraseLines && !enPhraseLines.has(layer.name.trim().toUpperCase())) continue;
+    if (enPhraseLines) {
+      const layerNameUpper = layer.name.trim().toUpperCase();
+      const matchesPhrase = [...enPhraseLines].some(
+        line => line === layerNameUpper || line.split(/\s+/).includes(layerNameUpper)
+      );
+      if (!matchesPhrase) continue;
+    }
     layers.push(layer);
   }
   console.log(`[getTranslatableLayers] folder "${folderLayer.name}" → expected SO names from phrase: [${enPhraseLines ? [...enPhraseLines].join(", ") : "none"}] → matched ${layers.length} SO(s):`, layers.map(l => l.name));

@@ -62,7 +62,7 @@ export function guessThePhrase(layer, appState) {
     return null;
   }
 
-  const translatedPhrase = parseRawPhrase(langEntries[bestIndex], "strict");
+  const translatedPhrase = parseRawPhrase(langEntries[bestIndex], "raw");
   if (!translatedPhrase) {
     console.warn(`[guessThePhrase] "${layer.name}" — matched EN phrase "${enEntries[bestIndex]}" but translatedPhrase is empty after parseRawPhrase("strict")`);
     return null;
