@@ -219,7 +219,7 @@ function _findPhraseContainer(layer, normalizedEN) {
         // upgrades to "TOTAL CREDITS WON", all words still explained → keep climbing).
         seedPhraseIndex  = bestIndex;
         lastGoodAncestor = current;
-        console.log("English phrase is :", current.name, "→ phrase index", bestIndex, "score", bestScore);
+        console.log(`[climb] folder "${current.name}" best EN match: idx ${bestIndex} score ${bestScore.toFixed(2)}`);
 
       } else if (seedPhraseIndex !== -1) {
         // Stop rule 2: score dropped below 0.5 after seeding

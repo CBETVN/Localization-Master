@@ -330,7 +330,7 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
   // e.g. "BUY\nBONUS" → ["BUY", "BONUS"]
   // These are used to match against child layer names inside the folder.
   const enLines = parseRawPhrase(matchedPhrase, "linesArray");
-  console.log(`${enLines} `);
+  console.log("[processMatchedFolder] EN lines:", enLines);
   const transPhrase = translatedPhrase;
 
   // STEP 2: Guard — if there's no translation for this phrase, nothing to do.
@@ -341,7 +341,7 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
   // The count of transLines may differ from enLines — e.g. EN has 3 words, DE merges two into one.
   // matchLayersToLines handles this with tail-anchoring logic.
   const transLines = parseRawPhrase(transPhrase, "linesArray");
-  console.log(`${transLines} `);
+  console.log("[processMatchedFolder] translated lines:", transLines);
 
   // STEP 4: Get translatable child layers and soIdMap from single-source-of-truth API.
   // Handles recursive flatten, kind filter (SO + TEXT only), visibility filter, and SO dedup.
@@ -395,9 +395,8 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
         continue;
       }
 
-      // DELETE LATER
-      // console.log(`[${matchType}] "${child.layer.name}" → "${text}"`);
       await ps.translateSmartObject(child.layer, text);
+      console.log(`[translated SO] "${child.layer.name}" → "${text}"`);
       processedIds.add(await ps.getSOid(child.layer)); // Mark this SO as processed to prevent duplicate translations of its instances
 
 
@@ -414,7 +413,7 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
       // console.log(`[processMatchedFolder] processedIds after adding:`, [...processedIds]);
 
     } else if (child.layer.kind === constants.LayerKind.TEXT) {
-      console.log(`Text layer — not yet implemented: "${child.layer.name}" → "${text}"`);
+      console.log(`[translated Text] "${child.layer.name}" → "${text}"`);
     }
   }
 }
