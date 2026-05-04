@@ -1,7 +1,4 @@
-// import { asModal as executeAsModal } from "./utils/photoshop-utils.js";
-// import { photoshop } from "../globals";
-// Import XLSX - it's a UMD library that may attach to global scope
-import "../lib/xlsx.full.min.js";
+
 import { uxp } from "../globals";
 import { photoshop } from "../globals";
 import * as ps from "./photoshop.js"; // Import all Photoshop API functions as ps
@@ -9,7 +6,6 @@ import * as ps from "./photoshop.js"; // Import all Photoshop API functions as p
 // Access XLSX from global scope
 import * as phraseGuesser from "./phraseGuesser";
 import { getTranslatableLayers } from "./getTranslatableLayers.js";
-const XLSX = window.XLSX;
 const { core, app, constants } = photoshop;
 const { executeAsModal } = photoshop.core;
 const { batchPlay } = photoshop.action;
@@ -27,72 +23,6 @@ let smartObjectsForProcessing = [];
 let processedIds = new Set(); // Tracks SmartObjectMoreIDs already translated in this run. Shared across translateAll and processMatchedFolder to prevent duplicate translations of instances.
 
 
-
-
-
-
-
-
-
-
-
-export async function parseExcelFile(fileOrArrayBuffer) {
-  let arrayBuffer;
-  
-  // Check if it's a UXP file object or already an ArrayBuffer
-  if (fileOrArrayBuffer.read && typeof fileOrArrayBuffer.read === 'function') {
-    // It's a UXP file object - read it
-    arrayBuffer = await fileOrArrayBuffer.read({ format: uxp.storage.formats.binary });
-  } else {
-    // It's already an ArrayBuffer
-    arrayBuffer = fileOrArrayBuffer;
-  }
-  
-  // Parse XLSX file
-  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-  
-  // Extract language data from workbook
-  return extractLanguageData(workbook);
-}
-
-/**
- * Extract language data from workbook
- * @param {Object} workbook - XLSX workbook object
- * @returns {Object} - { languageData, availableLanguages }
- */
-
-
-function extractLanguageData(workbook) {
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-  const languageData = {};
-  const availableLanguages = [];
-
-  if (jsonData.length > 0) {
-    const languages = jsonData[0];
-    const ignoredColumns = ["screen preview"];
-
-    languages.forEach(lang => {
-      if (lang && lang.trim() && !ignoredColumns.includes(lang.trim().toLowerCase())) {
-        availableLanguages.push(lang);
-        languageData[lang] = [];
-      }
-    });
-
-    for (let i = 1; i < jsonData.length; i++) {
-      const row = jsonData[i];
-      availableLanguages.forEach((language) => {
-        const columnIndex = languages.indexOf(language);
-        const cell = row[columnIndex];
-        languageData[language].push((cell && typeof cell === 'string') ? cell : "");
-      });
-    }
-  }
-
-  return { languageData, availableLanguages };
-}
 
 
 
@@ -133,71 +63,6 @@ function normalizeForMatch(str) {
  */
 
 
-
-
-
-
-
-
-// export async function translateAll(appState) {
-//   const startTime = Date.now();
-//   if (!appState.selectedLanguage) {
-//     app.showAlert("Please select a language first");
-//     return;
-//   }
-//   if (!appState.languageData?.["EN"]) {
-//     app.showAlert("No data loaded.");
-//     return;
-//   }
-
-//   const allVisibleLayers = ps.getAllVisibleLayers(app.activeDocument.layers);
-
-//   //creates a map of layer.id → index in allVisibleLayers for O(1)/ lookup during the loop, avoiding repeated .findIndex calls
-//   const layerIndexMap = new Map(allVisibleLayers.map((layer, i) => [layer.id, i]));
-
-//   // Single bulk batchPlay call to fetch the full Photoshop descriptor for every visible layer at once.
-//   // Each entry in allInfos corresponds to the layer at the same index in allVisibleLayers.
-//   // The key data used from each descriptor is smartObjectMore.ID — the SmartObjectMoreID
-//   // shared across all instances of the same linked Smart Object, used for deduplication.
-//   const allInfos = await batchPlay(
-//     allVisibleLayers.map(layer => ({ _obj: "get", _target: [{ _ref: "layer", _id: layer.id }] })),
-//     { synchronousExecution: true }
-//   );
-
-//   // Tracks SmartObjectMoreIDs, not layer instance IDs.
-//   // Shared with processMatchedFolder so both branches see the same picture
-//   // regardless of which one encounters a given SO first.
-//   const translatedSOIds = new Set();
-
-//   for (const layer of allVisibleLayers) {
-//     if (!layer.visible) continue;
-
-//     // Guard: skip if this SO's internal document was already translated.
-//     // Uses smartObjectMore.ID so all instances of the same SO are blocked by one entry.
-//     //1.Give me this layer's position in the array 2. Give me the full descriptor for this layer from allInfos using that position 3. Dig out the internal smart object document ID from the descriptor
-//     const layerSOId = allInfos[layerIndexMap.get(layer.id)]?.smartObjectMore?.ID;
-//     //If this SO was already translated by another instance, skip it
-//     if (layerSOId && translatedSOIds.has(layerSOId)) continue;
-
-//     if (ps.isLayerAGroup(layer)) {
-//       if (isNameENPhrase(layer.name, appState)) {
-//         console.log(`Layer: ${layer.name} is a matching folder`);
-//         // Pass translatedSOIds so processMatchedFolder can check and populate it
-//         await processMatchedFolder(layer, appState, translatedSOIds, allInfos, layerIndexMap);
-//       }
-//       continue;
-//     }
-
-//     if (layer.kind !== constants.LayerKind.SMARTOBJECT) continue;
-
-//     const layerInstances = ps.getSmartObjectInstances(layer, allVisibleLayers, allInfos, layerIndexMap);
-//     if (!layerInstances) continue;
-
-//     // Mark the SmartObjectMoreID so all instances are blocked from here on
-//     if (layerSOId) translatedSOIds.add(layerSOId);
-//   }
-//   console.log(`translateAll took ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
-// }
 
 
 
