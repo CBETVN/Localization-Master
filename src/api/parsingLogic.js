@@ -190,15 +190,24 @@ export async function processMatchedFolder(folderLayer, appState, matchedPhrase,
     layer,
   }));
 
-  // STEP 5: Match each child layer to a translated line.
+  // STEP 5: Build the do-not-translate set from the raw EN phrase.
+  // Lines wrapped entirely in () — e.g. "(X2)" — mark layers that must be left
+  // untouched in every language. The set is derived on-demand from the matched
+  // EN phrase so it's always in sync with the Excel data and requires no
+  // hardcoding. Passed into matchLayersToLines so it can skip those layers while
+  // still advancing the trans-slot counter to preserve positional alignment.
+  const doNotTranslate = buildDoNotTranslateSet(matchedPhrase);
+
+  // STEP 6: Match each child layer to a translated line.
   // Uses a confidence ladder: exact name match → fuzzy name match → stack index fallback.
   // Returns a Map<layerId, { text, matchType } | null>
-  // null means the layer was in a "middle gap" and should be left untouched.
+  // null means the layer is untouched (do-not-translate, duplicate EN index, or overflow).
   // If overall confidence is too low (too many layers fell to stack index), the whole folder is skipped.
   const { skipped, reason, confidence, result } = matchLayersToLines(
     childLayers,
     enLines,
-    transLines
+    transLines,
+    doNotTranslate
   );
 
   // DELETE LATER
@@ -337,6 +346,44 @@ export async function generateSuggestions(layer, appState) {
 
 ////////////// Helper functions //////////////////////
 
+/**
+ * Reads a raw EN phrase from the Excel table and returns the set of layer names
+ * that must NOT be translated — identified by lines where the entire content is
+ * wrapped in parentheses: e.g. "(X2)" or "(SUPER)".
+ *
+ * This is the authoritative source for skip decisions. It reads directly from
+ * the Excel data, so no hardcoding is needed and it works correctly for any phrase
+ * in any current or future PSD without code changes.
+ *
+ * Why () wrapping = do-not-translate:
+ *   The convention in the Excel file is that a line like "(X2)" means the layer
+ *   named X2 should appear unchanged in all languages — it's a symbol, number,
+ *   or brand element that is never localized. The translator marks it this way
+ *   deliberately so the plugin knows to skip it.
+ *
+ * Why the slot must still be consumed:
+ *   Even though the layer is skipped, its position in the EN line sequence is real.
+ *   If X2 is at enIndex=0 and CHANCE is at enIndex=1, CHANCE must still receive
+ *   transLines[1] — not transLines[0]. Consuming the slot preserves the alignment
+ *   between EN line positions and translated line positions.
+ *
+ * @param {string} rawEnPhrase - Raw EN phrase string as stored in languageData["EN"][i]
+ *   e.g. "(X2)\nCHANCE\nFOR BONUS\nACTIVE"
+ * @returns {Set<string>} Uppercase layer names to leave untouched during translation
+ *   e.g. Set{"X2"}
+ */
+function buildDoNotTranslateSet(rawEnPhrase) {
+  const set = new Set();
+  for (const line of rawEnPhrase.split("\n")) {
+    // Match lines where the ENTIRE content (after trimming) is wrapped in ().
+    // e.g. "(X2)" → captures "X2". "CHANCE" → no match. "(do not translate!)" → captures "do not translate!".
+    // The + quantifier ensures empty parens "()" are ignored.
+    const match = line.trim().match(/^\(([^)]+)\)$/);
+    if (match) set.add(match[1].trim().toUpperCase());
+  }
+  return set;
+}
+
 
 
 
@@ -352,7 +399,14 @@ export async function generateSuggestions(layer, appState) {
  *                               result is Map<layerId, { text, matchType, enIndex } | null>
  *                               null means untouched
  */
-function matchLayersToLines(childLayers, enLines, transLines) {
+/**
+ * @param {Set<string>} doNotTranslate - Uppercase layer names to skip without translating.
+ *   Built from () markers in the raw EN phrase by buildDoNotTranslateSet().
+ *   Skipped layers still advance the trans-slot counter so subsequent layers
+ *   receive the correct translation line and positional alignment is preserved.
+ *   Defaults to empty set (no skips) when called without this argument.
+ */
+function matchLayersToLines(childLayers, enLines, transLines, doNotTranslate = new Set()) {
   const result = new Map();
 
   // Build exact EN line → index lookup (uppercase)
@@ -424,14 +478,13 @@ function matchLayersToLines(childLayers, enLines, transLines) {
   // only the first gets the translation — the rest are left untouched (null).
   const assignedEnIndices = new Set();
 
-  // --- TEST ONLY: hardcoded skip list — layers whose name matches are left untouched ---
-  const doNotTranslate = new Set(["SUPER", "X2",]);
-
   resolved.forEach(({ layer, matchType, enIndex }, resolvedIndex) => {
 
-    // TEST: skip layers in the doNotTranslate list — leave untouched, but advance the
-    // position counter so subsequent layers don't get shifted into the wrong trans slot.
-    // e.g. X2 skipped at enIndex=0 → CHANCE must still get transLines[1], not transLines[0].
+    // Skip layers marked as do-not-translate (entire EN line was wrapped in parentheses).
+    // The layer is left untouched (null) but its enIndex is still added to assignedEnIndices
+    // so the trans-slot counter advances normally — subsequent layers receive the correct
+    // translation line without positional shift.
+    // e.g. phrase "(X2)\nCHANCE\nFOR BONUS": X2 skipped at slot 0 → CHANCE gets transLines[1].
     if (doNotTranslate.has(layer.name.trim().toUpperCase())) {
       result.set(layer.id, null);
       assignedEnIndices.add(enIndex);

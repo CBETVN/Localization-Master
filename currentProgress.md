@@ -265,15 +265,20 @@ CHANCE    → uniquePosition=1 → transLines[1] = "CHANCE"       ✓
 FOR BONUS → uniquePosition=2 → transLines[2] = "AUF DEN BONUS" ✓
 ```
 
-### Current state — temporary hardcoded array ⚠️ TEST ONLY
+### `buildDoNotTranslateSet` — reading `()` markers from the EN phrase ✅ FIXED
 
-The skip list is currently a hardcoded `Set` inside `matchLayersToLines` for testing purposes:
+The hardcoded skip set has been replaced with `buildDoNotTranslateSet(rawEnPhrase)` in `parsingLogic.js`. It scans the raw EN phrase for lines where the **entire content is wrapped in `()`** and returns those as a `Set` of uppercase names to skip.
 
 ```js
-// --- TEST ONLY: hardcoded skip list — layers whose name matches are left untouched ---
-const doNotTranslate = new Set(["SUPER", "X2"]);
+// "(X2)\nCHANCE\nFOR BONUS\nACTIVE" → Set{"X2"}
+function buildDoNotTranslateSet(rawEnPhrase) {
+  const set = new Set();
+  for (const line of rawEnPhrase.split("\n")) {
+    const match = line.trim().match(/^\(([^)]+)\)$/);
+    if (match) set.add(match[1].trim().toUpperCase());
+  }
+  return set;
+}
 ```
 
-This is **not the final implementation**. It must be replaced with logic that reads the `()` markers directly from the Excel EN phrase (e.g. `(X2)\nCHANCE\nFOR BONUS` → X2 is do-not-translate, CHANCE and FOR BONUS are translatable). The hardcoded array is only there to verify the position-advancing fix works before investing in the full parsing approach.
-
-**Tested:** Working on first runs. `x2` left untouched, `CHANCE` and `FOR BONUS` get correct translations.
+`processMatchedFolder` calls `buildDoNotTranslateSet(matchedPhrase)` before calling `matchLayersToLines` and passes the result as the 4th argument. `matchLayersToLines` signature is now `(childLayers, enLines, transLines, doNotTranslate = new Set())`. The skipped layer's `enIndex` is still added to `assignedEnIndices` so subsequent layers receive the correct trans slot — positional alignment is preserved.

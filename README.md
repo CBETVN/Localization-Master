@@ -40,7 +40,8 @@ LocalizationMaster/
 │   ├── api/
 │   │   ├── api.js                   # Unified API object exported to components
 │   │   ├── photoshop.js             # All PS-specific functions (translateSmartObject, getSOid, purgeSOInstancesFromArray, etc.)
-│   │   ├── parsingLogic.js          # Excel parsing, translateAll, processMatchedFolder, matchLayersToLines, parseRawPhrase
+│   │   ├── excelParser.js           # Excel file parsing — file/ArrayBuffer in → { languageData, availableLanguages } out
+│   │   ├── parsingLogic.js          # translateAll, processMatchedFolder, matchLayersToLines, parseRawPhrase, buildDoNotTranslateSet
 │   │   ├── phraseGuesser.js         # guessThePhrase — walks layer ancestry to find EN phrase + translation
 │   │   ├── getTranslatableLayers.js # Returns SO/text child layers for a folder, filtered and deduped
 │   │   ├── validateMasterFile.js    # Validates Excel structure before loading
@@ -208,7 +209,7 @@ All other layer types (shapes, fill layers, adjustment layers, masks) are exclud
 - **Double SO instances**: the same linked SO often appears twice in a folder (one directly, one inside a sub-group). They share `smartObjectMore.ID`. `purgeSOInstancesFromArray` deduplicates before the loop; `processedIds` prevents re-translation when the same container is matched again from a sibling SO.
 - **Intermediate wrapper groups**: SO/text layers are commonly nested under unnamed sub-groups (`Group 3`, `Surface`, `txt only`). `_collectVocabNames` recurses through these transparently.
 - **Partial translations**: many EN phrases have empty cells for some languages. `parseExcelFile` stores `""` — `phraseGuesser` rejects empty translated phrases and leaves the layer untouched.
-- **`(do not translate!)` markers**: some EN lines are annotated with `()` markers (e.g. `SUPER (do not translate!)`). The plugin currently skips a hardcoded test set `["SUPER", "X2"]` — this must be replaced with marker-based logic reading from the Excel phrase. ⚠️ WIP.
+- **`()` do-not-translate markers**: lines in the EN phrase wrapped entirely in `()` (e.g. `(X2)`) mark layers that must never be translated. `buildDoNotTranslateSet(rawEnPhrase)` reads these on-demand from the matched EN phrase and passes the resulting `Set` to `matchLayersToLines`. The skipped layer's trans slot is still consumed so subsequent layers receive the correct translation line.
 - **Locked layers**: `translateSmartObject` checks for locked state before entering edit mode and skips silently.
 - **Invisible layers**: excluded at collection time — if a language group (e.g. the `BG` group) is hidden, it is skipped entirely.
 
@@ -221,7 +222,8 @@ The pipeline is fully implemented and working end-to-end:
 3. **`processMatchedFolder(folder, appState, enPhrase, translatedPhrase)`** is called with the matched container. It:
    - Parses both phrases into line arrays via `parseRawPhrase(phrase, "linesArray")`
    - Calls `getTranslatableLayers(folder, enPhrase)` to get only relevant SO/text children
-   - Calls `matchLayersToLines(childLayers, enLines, transLines)` to assign a translated string to each child layer
+   - Builds a `doNotTranslate` set via `buildDoNotTranslateSet(enPhrase)` — lines fully wrapped in `()` are skipped without consuming a trans slot
+   - Calls `matchLayersToLines(childLayers, enLines, transLines, doNotTranslate)` to assign a translated string to each child layer
 4. **`matchLayersToLines`** resolves each child layer to an EN line index using a confidence ladder: exact name → fuzzy (startsWith) → word-in-line → stack index fallback. Layers are sorted by EN index, then assigned trans lines sequentially. The last assigned layer absorbs any remaining trans lines (translator expansion). Layers beyond the trans slot count get `null` (left untouched).
 5. **`processedIds`** (module-level `Set` of `smartObjectMore.ID`) prevents duplicate translations when the same SO appears in multiple folders or has multiple PSD instances.
 
@@ -264,20 +266,25 @@ The pipeline is fully implemented and working end-to-end:
 **`processMatchedFolder(folderLayer, appState, enPhrase, translatedPhrase)`**
 - Parses phrases to line arrays, fetches translatable children via `getTranslatableLayers`, matches layers to trans lines via `matchLayersToLines`, then calls `translateSmartObject` for each assigned layer
 
-**`matchLayersToLines(childLayers, enLines, transLines)`**
-- Name-first matching (exact → fuzzy → word-in-line → stack index). Returns `Map<layerId, { text, matchType } | null>`. Sequential assignment — last layer absorbs tail; overflow gets null. Returns confidence score; skips folder if below 0.5.
+**`matchLayersToLines(childLayers, enLines, transLines, doNotTranslate = new Set())`**
+- Name-first matching (exact → fuzzy → word-in-line → stack index). Returns `Map<layerId, { text, matchType } | null>`. Sequential assignment — last layer absorbs tail; overflow gets null. Layers in `doNotTranslate` are set to null but still consume their trans slot so positional alignment is preserved. Returns confidence score; skips folder if below 0.5.
 
 **`parseRawPhrase(phrase, mode)`**
 - Cleans a raw Excel phrase. Modes: `"linesArray"` (array of lines, spaces preserved), `"oneLiner"` (flat string), `"raw"` (newlines preserved), `"strict"` (drops `[...]` lines, returns flat string)
-
-**`parseExcelFile(fileOrArrayBuffer)`**
-- Accepts UXP file object or ArrayBuffer, parses via SheetJS, returns `{ languageData, availableLanguages }`
 
 **`isNameENPhrase(layerName, appState)`**
 - Returns true if a string matches any EN entry after `parseRawPhrase("oneLiner")` normalization
 
 **`generateSuggestions(layer, appState)`**
 - Returns translation candidates for the selected layer using `phraseGuesser.guessThePhrase` + `parsePhraseForSuggestions`
+
+**`buildDoNotTranslateSet(rawEnPhrase)`**
+- Scans a raw EN phrase for lines entirely wrapped in `()` (e.g. `(X2)`) and returns a `Set` of uppercase layer names to skip. Called by `processMatchedFolder` on the matched EN phrase before each `matchLayersToLines` call.
+
+### `excelParser.js`
+
+**`parseExcelFile(fileOrArrayBuffer)`**
+- Accepts UXP file object or ArrayBuffer, reads via SheetJS, returns `{ languageData, availableLanguages }`. The only callers are `LoadFDiskButton` and `LoadFURLButton`, both via `api.parseExcelFile()`.
 
 ### `phraseGuesser.js`
 
@@ -295,7 +302,6 @@ The pipeline is fully implemented and working end-to-end:
 
 - **Already-processed SOs consume a trans slot in `matchLayersToLines`** — when `Free` is already in `processedIds`, it still occupies `uniquePosition=0` during assignment, shifting `Spins` and `ACTIVE` to wrong slots. Fix: pass a `skipLayerIds` set to `matchLayersToLines` so processed layers are excluded without advancing the slot counter.
 - **Ancestor folder names as `phraseGuesser` candidates** — `_buildPhraseCandidates` pushes ancestor folder names (e.g. `buyBonusBtnActive1Portrait - EXPORT 50%`) into the scoring pool. These can outcompete the correct compound SO-name candidate when the folder name contains overlapping words. Folder names should be deprioritized or excluded.
-- **`doNotTranslate` is a hardcoded test Set** — `matchLayersToLines` has `new Set(["SUPER", "X2"])` which must be replaced with logic that reads `()` markers from the Excel EN phrase.
 - `LoadFURLButton` is disabled (URL hardcoded to `null`)
 - Font shrink bug: workaround in `translateSmartObject` restores `impliedFontSize` via batchPlay after setting `textItem.contents`
 - Some diagnostic `console.log` calls remain, marked `// DELETE LATER`
