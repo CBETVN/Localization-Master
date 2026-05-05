@@ -101,6 +101,12 @@ The Excel file has this structure:
 | TOTAL WON   | GESAMT      | ОБЩО        | CELKOVO     | ...  |
 ```
 
+![Excel format example](src/assets/excelimage.png)
+
+
+
+
+
 - Row 0 = language codes (column headers). Special columns like `Screen Preview` are ignored.
 - Row 1+ = translation pairs. EN column is the lookup key; other columns are translations.
 - `languageData["EN"][i]` corresponds to `languageData["DE"][i]` — **index-aligned arrays**.
@@ -156,14 +162,6 @@ KAUFEN",...
 ,0 SPINS REMAINING,0 VERBLEIBENDE DREHS,...
 ,SPINS COMPLETED,ABGESCHLOSSENE DREHS,...
 ```
-
-**Key observations from real data:**
-- Many cells are empty for certain languages (arrays must stay index-aligned with empty string fallback)
-- `[NUMBER]`, `(value)`, `(do not translate!)` markers appear inside phrases
-- Some EN entries span 4–5 lines with `\n`
-- `Screen Preview` column and trailing empty columns must be ignored
-- Some rows have content only in EN + DE (partial translations)
-- `SUPER (do not translate!)` lines must be skipped during translation
 
 ---
 
