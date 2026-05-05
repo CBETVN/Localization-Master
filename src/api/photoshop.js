@@ -12,6 +12,29 @@ const { executeAsModal } = photoshop.core;
 // Flip to false to restore the previous flat behavior exactly.
 const RECURSIVE_SO = true;
 
+// ── MISSING FONT REPLACEMENT ──────────────────────────────────
+// When true, text layers with unavailable fonts get swapped to
+// the hardcoded fallback BEFORE translation text is written.
+// Flip to false to disable — PS will use its own default substitute instead.
+const REPLACE_MISSING_FONTS = true;
+const FALLBACK_FONT = {
+  postScriptName: "Lucida Handwriting",  // exact PostScript name PS needs to find the font
+  fontName: "Ethnocentric",               // font family display name
+  fontStyleName: "Regular"                       // weight/style variant
+};
+
+
+// "fontPostScriptName": "MyriadPro-Regular",
+// "fontName": "Myriad Pro", 
+
+// Abort translation of a SO if it contains more than this number of layers,
+// to avoid freezing Photoshop and crashing the plugin.
+// This is a safeguard for very complex SOs that would require too much processing time.
+const whatsRidiculousLayerCount = 50; 
+
+
+
+
 
 
 export const notify = async (message) => {
@@ -108,6 +131,10 @@ export async function translateSmartObject(smartObject, translation) {
         // Read original size before the write (allInnerInfos was captured above for this reason)
         const originalSize = allInnerInfos[i].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
 
+        // If the font is missing, swap it to the fallback BEFORE writing new text.
+        // This prevents PS from using its own default substitute (usually Myriad Pro).
+        if (REPLACE_MISSING_FONTS) await replaceMissingFont(allInnerInfos[i]);
+
         // Write the translation
         layer.textItem.contents = translation;
         app.activeDocument.activeLayers = [layer];
@@ -152,17 +179,6 @@ export async function translateTextLayer(textLayer, translation) {
     textLayer.textItem.contents = translation;
   }, { commandName: "Translate Text Layer" });
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -370,6 +386,13 @@ async function translateSmartObjectRecursive(smartObject, translation) {
 
       // Re-fetch a live layer reference (stale after modal entry)
       const allDocLayers = getAllLayers(app.activeDocument.layers);
+      
+      // if(allDocLayers.length > whatsRidiculousLayerCount) {
+      //   console.warn(`[recursive] Smart Object "${smartObject.name}" has ${allDocLayers.length} layers, which exceeds the safeguard threshold of ${whatsRidiculousLayerCount}. Skipping translation to avoid performance issues.`);
+      //   return;
+      // }
+
+
       const freshSmartObject = allDocLayers.find(l => l.id === smartObjectId);
 
       if (!freshSmartObject) {
@@ -407,6 +430,15 @@ async function translateSmartObjectRecursive(smartObject, translation) {
  */
 async function _translateSOContentsRecursive(translation, isTopLevel) {
   const allLayers = getAllLayers(app.activeDocument.layers);
+
+
+  // GUARD: too many layers — likely a very complex SO that would cause performance issues
+  if(allLayers.length > whatsRidiculousLayerCount) {
+  console.warn(`[recursive] ${app.activeDocument.name} has ${allLayers.length} layers, which exceeds the safeguard threshold of ${whatsRidiculousLayerCount}. Skipping translation to avoid performance issues.`);
+  app.activeDocument.closeWithoutSaving();
+  return;
+  }
+
   const textLayers = allLayers.filter(l => l.kind === "text" && l.visible);
   const nestedSOs = allLayers.filter(l => l.kind === "smartObject" && l.visible && !l.locked);
 
@@ -423,6 +455,11 @@ async function _translateSOContentsRecursive(translation, isTopLevel) {
       if (layer.kind !== "text" || !layer.visible) continue;
 
       const originalSize = allInnerInfos[i].textKey.textStyleRange[0].textStyle.impliedFontSize._value;
+
+      // If the font is missing, swap it to the fallback BEFORE writing new text.
+      // This prevents PS from using its own default substitute (usually Myriad Pro).
+      if (REPLACE_MISSING_FONTS) await replaceMissingFont(allInnerInfos[i]);
+
       layer.textItem.contents = translation;
       app.activeDocument.activeLayers = [layer];
 
@@ -482,10 +519,80 @@ async function _translateSOContentsRecursive(translation, isTopLevel) {
 
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MISSING FONT REPLACEMENT (gated by REPLACE_MISSING_FONTS flag)
+// Delete this section + the two one-liner calls in the translate loops to revert.
+// ══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Checks if a text layer's font is missing and replaces it with FALLBACK_FONT.
+ * Must be called inside an executeAsModal context, with the layer already selected
+ * (app.activeDocument.activeLayers = [layer]).
+ *
+ * How it works:
+ *   1. Reads the textStyleRange array from the layer's batchPlay descriptor.
+ *   2. Checks every style range for fontAvailable === false.
+ *      (A single layer can have mixed fonts across ranges, e.g. bold + italic spans.)
+ *   3. If ANY range has a missing font, applies a batchPlay "set" that overwrites
+ *      the font on the entire layer to FALLBACK_FONT.
+ *
+ * @param {Object} layerDescriptor - The batchPlay descriptor for this layer
+ *                                   (one element from allInnerInfos).
+ * @returns {boolean} true if a font was replaced, false if all fonts were available.
+ */
+async function replaceMissingFont(layerDescriptor) {
+  // Grab the style ranges — each range describes font/size/color for a span of characters
+  const styleRanges = layerDescriptor?.textKey?.textStyleRange;
+  if (!styleRanges) return false;
 
+  // Check if ANY style range reports the font as unavailable
+  const hasMissingFont = styleRanges.some(
+    range => range.textStyle?.fontAvailable === false
+  );
+  if (!hasMissingFont) return false;
 
+  // Collect every unique missing font (fontName + fontStyleName combo)
+  // so we can remap them all in one batchPlay call
+  const missingFontsMap = new Map();
+  for (const range of styleRanges) {
+    if (range.textStyle?.fontAvailable === false) {
+      const missingFontName = range.textStyle.fontName;
+      const missingFontStyle = range.textStyle.fontStyleName;
+      // Use "name|style" as key to deduplicate (same font can appear in multiple ranges)
+      const dedupeKey = `${missingFontName}|${missingFontStyle}`;
+      if (!missingFontsMap.has(dedupeKey)) {
+        missingFontsMap.set(dedupeKey, { fontName: missingFontName, fontStyleName: missingFontStyle });
+        console.log(`[font-replace] "${missingFontName} ${missingFontStyle}" is missing → replacing with "${FALLBACK_FONT.fontName}"`);
+      }
+    }
+  }
 
+  // Build the fontMap array — one entry per unique missing font,
+  // all pointing to the same fallback
+  const fontMapEntries = Array.from(missingFontsMap.values()).map(missingFont => ({
+    _obj: "fontRemapEntry",
+    fromFont: {
+      _obj: "fontSpec",
+      fontName: missingFont.fontName,
+      fontStyleName: missingFont.fontStyleName
+    },
+    toFont: {
+      _obj: "fontSpec",
+      fontName: FALLBACK_FONT.fontName,
+      fontStyleName: FALLBACK_FONT.fontStyleName
+    }
+  }));
+
+  // Single batchPlay call replaces ALL missing fonts across the entire document at once.
+  // Uses PS's built-in "remapFonts" command — much cleaner than per-layer textStyle overrides.
+  await batchPlay([{
+    _obj: "remapFonts",
+    fontMap: fontMapEntries,
+    _options: { dialogOptions: "dontDisplay" }
+  }], { synchronousExecution: true });
+
+  return true;
+}
 
 
 
