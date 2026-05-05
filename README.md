@@ -93,13 +93,7 @@ The `appState` object bundles the first 4 into a single prop passed down to comp
 
 The Excel file has this structure:
 
-```
-| EN          | DE          | BG          | SK          | ...  |
-|-------------|-------------|-------------|-------------|------|
-| FREE SPINS  | FREISPIELE  | БЕЗПЛАТНИ   | ZADARMO     | ...  |
-| YOU WIN     | SIE GEWINNEN| ПЕЧЕЛИТЕ    | VYHRÁVÁTE   | ...  |
-| TOTAL WON   | GESAMT      | ОБЩО        | CELKOVO     | ...  |
-```
+
 
 ![Excel format example](src/assets/excelimage.png)
 
