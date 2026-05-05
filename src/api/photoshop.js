@@ -18,9 +18,9 @@ const RECURSIVE_SO = true;
 // Flip to false to disable — PS will use its own default substitute instead.
 const REPLACE_MISSING_FONTS = true;
 const FALLBACK_FONT = {
-  postScriptName: "Lucida Handwriting",  // exact PostScript name PS needs to find the font
+  // postScriptName: "Lucida Handwriting",  // exact PostScript name PS needs to find the font
   fontName: "Ethnocentric",               // font family display name
-  fontStyleName: "Regular"                       // weight/style variant
+  fontStyleName: ""                       // weight/style variant
 };
 
 

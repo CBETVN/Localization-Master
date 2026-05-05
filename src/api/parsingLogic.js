@@ -607,6 +607,10 @@ export function parsePhraseForSuggestions(phrase) {
 
   const results = new Set();
 
+  // 4. Full phrase — all lines joined with space
+  results.add(lines.join(" "));
+
+
   // 1. Individual lines as-is
   lines.forEach(line => results.add(line));
 
@@ -620,8 +624,7 @@ export function parsePhraseForSuggestions(phrase) {
     results.add(lines[i] + " " + lines[i + 1]);
   }
 
-  // 4. Full phrase — all lines joined with space
-  results.add(lines.join(" "));
+
 
   return Array.from(results);
 
