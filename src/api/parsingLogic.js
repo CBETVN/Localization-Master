@@ -55,19 +55,19 @@ async function isDocumentValidForTranslation() {
   const doc = app.activeDocument;
   if (!doc) { console.log('No active document.'); return false; }
 
-  try {
-    const res = await batchPlay([
-      { _obj: 'get', _target: [{ _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }] }
-    ], {});
-    const fmt = res[0]?.extension?.[0]?.toUpperCase();
-    if (fmt !== "PSD" && fmt !== "PSB") {
-      app.showAlert("Only PSD/PSB documents are supported.");
-      return false;
-    }
-  } catch (e) {
-    console.error('isDocumentValidForTranslation error:', e);
-    return false;
-  }
+  // try {
+  //   const res = await batchPlay([
+  //     { _obj: 'get', _target: [{ _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }] }
+  //   ], {});
+  //   const fmt = res[0]?.extension?.[0]?.toUpperCase();
+  //   if (fmt !== "PSD" && fmt !== "PSB") {
+  //     app.showAlert("Only PSD/PSB documents are supported.");
+  //     return false;
+  //   }
+  // } catch (e) {
+  //   console.error('isDocumentValidForTranslation error:', e);
+  //   return false;
+  // }
 
   return true;
 }
